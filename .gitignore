@@ -80,3 +80,4 @@ coverage.xml
 media/
 !media/.gitkeep
 static/collected/
+.env
