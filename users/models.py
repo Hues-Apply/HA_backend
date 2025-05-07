@@ -1,5 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.core.exceptions import ValidationError
+
+from PIL import Image
 
 import random
 
@@ -47,3 +50,79 @@ class CustomUser(AbstractUser):
         self.otp = otp
         self.save()
         return otp
+
+    
+class UserProfile(models.Model):
+    def validate_image_size(image):
+        file_size = image.file.size
+        limit_kb = 500
+        if file_size > limit_kb * 1024:
+            raise ValidationError(f"Image size should not exceed {limit_kb} KB")
+        
+    def validate_image_format(image):
+        try:
+            img = Image.open(image)
+            if img.format not in ['JPEG', 'PNG']:
+                raise ValidationError("Only JPEG and PNG images are allowed.")
+        except Exception:
+            raise ValidationError("Invalid image format.")
+        
+    def user_directory_path(instance, filename):
+        return f'profile_pictures/user_{instance.user.id}/{filename}'
+        
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    name = models.CharField(max_length=100, blank=True)
+    email = models.EmailField(blank=True)
+    profile_picture = models.ImageField(upload_to=user_directory_path, blank=True, default='profile_pictures/default.jpg', validators=[validate_image_size, validate_image_format]) #default image uplaoded from frontend team side
+    phone_number = models.CharField(max_length=20, blank=True)
+    country = models.CharField(max_length=100, blank=True)
+    goal = models.CharField(max_length=100, blank=True)
+    
+   
+    
+class CareerProfile(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    industry = models.CharField(max_length=100)
+    job_title = models.CharField(max_length=100)
+    profile_summary = models.TextField()
+    
+class EducationProfile(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    degree = models.CharField(max_length=100)
+    school = models.CharField(max_length=100)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    extra_curricular = models.TextField(blank=True)
+    
+class ExperienceProfile(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    job_title = models.CharField(max_length=100)
+    company_name = models.CharField(max_length=100)
+    location = models.CharField(max_length=100)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    description = models.TextField()
+    
+class ProjectsProfile(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    project_title = models.CharField(max_length=200)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    project_link = models.URLField(blank=True)
+    description = models.TextField()
+    
+class OpportunitiesInterest(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    scholarships = models.BooleanField(default=False)
+    jobs = models.BooleanField(default=False)
+    grants = models.BooleanField(default=False)
+    internships = models.BooleanField(default=False)
+
+class RecommendationPriority(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    academic_background = models.BooleanField(default=False)
+    work_experience = models.BooleanField(default=False)
+    preferred_locations = models.BooleanField(default=False)
+    others = models.BooleanField(default=False)
+    
+    
