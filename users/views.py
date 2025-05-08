@@ -15,7 +15,7 @@ class SendOTPView(APIView):
             otp = user.generate_otp()
             send_mail(
                 'Verify your email',
-                f'Your OTP is {otp}'
+                f'Your OTP is {otp}',
                 'reply@example.com',
                 [email],
             )
