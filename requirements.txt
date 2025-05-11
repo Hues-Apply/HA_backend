@@ -1,4 +1,8 @@
-Django>=4.0
 djangorestframework
+django-allauth
+dj-rest-auth
+djangorestframework-simplejwt
+requests
+PillowDjango>=4.0
 psycopg2-binary
 redis
