@@ -1,4 +1,10 @@
 Django>=4.0
-djangorestframework
 psycopg2-binary
 redis
+djangorestframework
+django-allauth
+dj-rest-auth
+djangorestframework-simplejwt
+requests
+Pillow
+
