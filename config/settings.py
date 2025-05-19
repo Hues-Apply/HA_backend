@@ -9,7 +9,11 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
+import os
+from dotenv import load_dotenv
+from urllib.parse import urlparse
 
+load_dotenv()
 from pathlib import Path
 from decouple import config
 
@@ -44,6 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'opportunities',
     'django.contrib.sites',
     'allauth',
     'rest_framework.authtoken',
@@ -96,15 +101,19 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+# Add these at the top of your settings.py
+
+# Replace the DATABASES section of your settings.py with this
+tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST'),
-        'PORT': config('DB_PORT'),
+        'NAME': config('DB_NAME', default=tmpPostgres.path.replace('/', '')),
+        'USER': config('DB_USER', default=tmpPostgres.username),
+        'PASSWORD': config('DB_PASSWORD', default=tmpPostgres.password),
+        'HOST': config('DB_HOST', default=tmpPostgres.hostname),
+        'PORT': config('DB_PORT', default=5432),
     }
 }
 
