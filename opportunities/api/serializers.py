@@ -34,3 +34,22 @@ class OpportunitySerializer(serializers.ModelSerializer):
             'skills_required', 'tags', 'tag_ids', 'deadline', 'created_at',
             'is_verified', 'is_featured', 'application_url', 'application_process'
         ]
+
+class OpportunityRecommendationSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source='opportunity.id')
+    title = serializers.CharField(source='opportunity.title')
+    type = serializers.CharField(source='opportunity.type')
+    organization = serializers.CharField(source='opportunity.organization')
+    category = serializers.SerializerMethodField()
+    location = serializers.CharField(source='opportunity.location')
+    is_remote = serializers.BooleanField(source='opportunity.is_remote')
+    deadline = serializers.DateField(source='opportunity.deadline')
+    score = serializers.IntegerField()
+    reasons = serializers.DictField()
+    
+    def get_category(self, obj):
+        return {
+            'id': obj['opportunity'].category.id,
+            'name': obj['opportunity'].category.name,
+            'slug': obj['opportunity'].category.slug
+        }

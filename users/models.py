@@ -70,7 +70,7 @@ class UserProfile(models.Model):
     def user_directory_path(instance, filename):
         return f'profile_pictures/user_{instance.user.id}/{filename}'
         
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='profile')
     name = models.CharField(max_length=100, blank=True)
     email = models.EmailField(blank=True)
     profile_picture = models.ImageField(upload_to=user_directory_path, blank=True, default='profile_pictures/default.jpg', validators=[validate_image_size, validate_image_format]) #default image uplaoded from frontend team side
