@@ -15,7 +15,6 @@ from urllib.parse import urlparse
 
 load_dotenv()
 from pathlib import Path
-from decouple import config
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -40,7 +39,7 @@ AUTH_USER_MODEL = 'users.CustomUser'
 # Application definition
 
 INSTALLED_APPS = [
-    'users',
+    # 'users',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -63,7 +62,7 @@ INSTALLED_APPS = [
 
 AUTHENTICATION_BACKENDS = [
     'allauth.account.auth_backends.AuthenticationBackend', #Allauth backend
-]
+
 
 REST_FRAMEWORK = {
     # Use Django's standard `django.contrib.auth` permissions,
@@ -124,16 +123,28 @@ LOGIN_REDIRECT_URL= 'account'
 
 
 # Database
+
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 # Add these at the top of your settings.py
 
 # Replace the DATABASES section of your settings.py with this
 
+# change the DATABASE_URL to your database URL in your .env file
+# DATABASE_URL=postgres://USER:PASSWORD@HOST:PORT/NAME
+
+
+# DO NOT CHANGE THIS
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgres://USER:PASSWORD@HOST:PORT/NAME')
+url = urlparse(DATABASE_URL)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    },
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': url.path[1:],
+        'USER': url.username,
+        'PASSWORD': url.password,
+        'HOST': url.hostname,
+        'PORT': url.port,
+    }
 }
 
 
@@ -179,10 +190,11 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-ACCOUNT_USER_MODEL_USERNAME_FIELD = 'email'
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
+
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
