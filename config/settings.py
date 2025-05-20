@@ -15,7 +15,6 @@ from urllib.parse import urlparse
 
 load_dotenv()
 from pathlib import Path
-from decouple import config
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -49,15 +48,14 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'opportunities',
-    'django.contrib.sites',
+    # 'django.contrib.sites',
     'users.apps.UsersConfig',
-    'allauth',
     'rest_framework.authtoken',
     'allauth.account',
     'allauth.socialaccount',
-    'dj_rest_auth',
-    'dj_rest_auth.registration',
-    'rest_framework_simplejwt.token_blacklist',
+    # 'dj_rest_auth',
+    # 'dj_rest_auth.registration',
+    # 'rest_framework_simplejwt.token_blacklist',
     'django_filters',
 
 ]
@@ -103,20 +101,20 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 
 # Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-# Add these at the top of your settings.py
+# change the DATABASE_URL to your database URL in your .env file
+# DATABASE_URL=postgres://USER:PASSWORD@HOST:PORT/NAME
 
-# Replace the DATABASES section of your settings.py with this
-tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
-
+# DO NOT CHANGE THIS
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgres://USER:PASSWORD@HOST:PORT/NAME')
+url = urlparse(DATABASE_URL)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default=tmpPostgres.path.replace('/', '')),
-        'USER': config('DB_USER', default=tmpPostgres.username),
-        'PASSWORD': config('DB_PASSWORD', default=tmpPostgres.password),
-        'HOST': config('DB_HOST', default=tmpPostgres.hostname),
-        'PORT': config('DB_PORT', default=5432),
+        'NAME': url.path[1:],
+        'USER': url.username,
+        'PASSWORD': url.password,
+        'HOST': url.hostname,
+        'PORT': url.port,
     }
 }
 
