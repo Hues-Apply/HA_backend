@@ -63,6 +63,13 @@ class VerifyOTPView(APIView):
         
         
 class UserViewSet(viewsets.ModelViewSet):
+    """
+    A viewset for managing user accounts.
+    
+    This viewset provides CRUD operations for the User model, using the
+    UserSerializer for serialization. Access is restricted to authenticated
+    users via the IsAuthenticated permission class.
+    """
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
