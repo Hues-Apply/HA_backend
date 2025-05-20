@@ -85,4 +85,12 @@ class Opportunity(models.Model):
             models.Index(fields=['type', 'deadline']),
             models.Index(fields=['location']),
         ]
+        
+    posted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="opportunities_posted",
+        null=True,
+        blank=True
+    )
 

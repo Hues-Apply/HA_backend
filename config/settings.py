@@ -48,15 +48,21 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework.authtoken',
+    'rest_framework_simplejwt.token_blacklist',
     'opportunities',
     'django.contrib.sites',
     'allauth',
-    'rest_framework.authtoken',
     'allauth.account',
     'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
     'dj_rest_auth',
     'dj_rest_auth.registration',
-    'rest_framework_simplejwt.token_blacklist',
+    
+]
+
+AUTHENTICATION_BACKENDS = [
+    'allauth.account.auth_backends.AuthenticationBackend', #Allauth backend
 ]
 
 REST_FRAMEWORK = {
@@ -98,23 +104,36 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
+#Social login settings
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP' : {
+            'client_id' : config('GOOGLE_CLIENT_ID'),
+            'secret' : config('GOOGLE_CLIENT_SECRET'),
+        },
+        'SCOPE' : ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'},
+        'METHOD': 'oauth2',
+        'VERIFIED_EMAIL' : True,
+    },
+}
+
+SOCIALACCOUNT_LOGIN_ON_GET=True
+LOGIN_REDIRECT_URL= 'account'
+
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 # Add these at the top of your settings.py
 
 # Replace the DATABASES section of your settings.py with this
-tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default=tmpPostgres.path.replace('/', '')),
-        'USER': config('DB_USER', default=tmpPostgres.username),
-        'PASSWORD': config('DB_PASSWORD', default=tmpPostgres.password),
-        'HOST': config('DB_HOST', default=tmpPostgres.hostname),
-        'PORT': config('DB_PORT', default=5432),
-    }
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+    },
 }
 
 
