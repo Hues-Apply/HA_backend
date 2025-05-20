@@ -21,7 +21,7 @@ class SendOTPView(APIView):
         email = request.data.get('email')
         
         if not email:
-            return Response({"error": "Email is required"}, status=400)
+            return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             user = CustomUser.objects.get(email=email)
             otp = user.generate_otp()
