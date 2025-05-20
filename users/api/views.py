@@ -45,7 +45,7 @@ class VerifyOTPView(APIView):
         otp = request.data.get('otp')
         
         if not email or not otp:
-            return Response({"error": "Email and OTP are required."}, status=400)
+            return Response({"error": "Email and OTP are required."}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             user = CustomUser.objects.get(email=email)
