@@ -17,6 +17,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     # For readable output
     category = CategorySerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
+    posted_by = serializers.StringRelatedField(read_only=True)
 
     # For input (write)
     category_id = serializers.PrimaryKeyRelatedField(
@@ -29,10 +30,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Opportunity
         fields = [
-            'id', 'title', 'type', 'organization', 'category', 'category_id',
-            'location', 'is_remote', 'description', 'eligibility_criteria',
-            'skills_required', 'tags', 'tag_ids', 'deadline', 'created_at',
-            'is_verified', 'is_featured', 'application_url', 'application_process'
+            'id', 'title', 'type', 'organization', 'category', 'category_id', 'location', 'is_remote', 'description', 'eligibility_criteria', 'skills_required', 'tags', 'tag_ids', 'deadline', 'created_at', 'is_verified', 'is_featured', 'application_url', 'application_process', 'posted_by'
         ]
 
 class OpportunityRecommendationSerializer(serializers.Serializer):
@@ -53,3 +51,4 @@ class OpportunityRecommendationSerializer(serializers.Serializer):
             'name': obj['opportunity'].category.name,
             'slug': obj['opportunity'].category.slug
         }
+

@@ -47,18 +47,22 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'opportunities',
-    # 'django.contrib.sites',
-    'users.apps.UsersConfig',
     'rest_framework.authtoken',
+    'rest_framework_simplejwt.token_blacklist',
+    'opportunities',
+    'django.contrib.sites',
+    'allauth',
     'allauth.account',
     'allauth.socialaccount',
-    # 'dj_rest_auth',
-    # 'dj_rest_auth.registration',
-    # 'rest_framework_simplejwt.token_blacklist',
-    'django_filters',
-
+    'allauth.socialaccount.providers.google',
+    'dj_rest_auth',
+    'dj_rest_auth.registration',
+    
 ]
+
+AUTHENTICATION_BACKENDS = [
+    'allauth.account.auth_backends.AuthenticationBackend', #Allauth backend
+
 
 REST_FRAMEWORK = {
     # Use Django's standard `django.contrib.auth` permissions,
@@ -99,10 +103,35 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
+#Social login settings
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'APP' : {
+            'client_id' : config('GOOGLE_CLIENT_ID'),
+            'secret' : config('GOOGLE_CLIENT_SECRET'),
+        },
+        'SCOPE' : ['profile', 'email'],
+        'AUTH_PARAMS': {'access_type': 'online'},
+        'METHOD': 'oauth2',
+        'VERIFIED_EMAIL' : True,
+    },
+}
+
+SOCIALACCOUNT_LOGIN_ON_GET=True
+LOGIN_REDIRECT_URL= 'account'
+
 
 # Database
+
+# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+# Add these at the top of your settings.py
+
+# Replace the DATABASES section of your settings.py with this
+
 # change the DATABASE_URL to your database URL in your .env file
 # DATABASE_URL=postgres://USER:PASSWORD@HOST:PORT/NAME
+
 
 # DO NOT CHANGE THIS
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgres://USER:PASSWORD@HOST:PORT/NAME')
