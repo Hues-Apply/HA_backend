@@ -62,6 +62,7 @@ INSTALLED_APPS = [
 
 AUTHENTICATION_BACKENDS = [
     'allauth.account.auth_backends.AuthenticationBackend', #Allauth backend
+]
 
 
 REST_FRAMEWORK = {
@@ -108,8 +109,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'APP' : {
-            'client_id' : config('GOOGLE_CLIENT_ID'),
-            'secret' : config('GOOGLE_CLIENT_SECRET'),
+            'client_id' : os.getenv('GOOGLE_CLIENT_ID'),
+            'secret' : os.getenv('GOOGLE_CLIENT_SECRET'),
         },
         'SCOPE' : ['profile', 'email'],
         'AUTH_PARAMS': {'access_type': 'online'},
