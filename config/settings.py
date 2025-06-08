@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-&xr2$*30wm0ovs57&be0r$()np*q3k!*l=!-(x)mi##!c31hdk
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ha-backend-pq2f.vercel.app', '.vercel.app']
 
 SITE_ID = 1
 
@@ -91,6 +91,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # React default port
     "http://127.0.0.1:3000",
+    "https://ha-backend-pq2f.vercel.app",
     # Add your frontend production URL when deploying
 ]
 
