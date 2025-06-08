@@ -53,11 +53,6 @@ def get_google_client_id(request):
         'client_id': settings.GOOGLE_OAUTH_CLIENT_ID
     }, status=status.HTTP_200_OK)
 
-from rest_framework.authtoken.models import Token
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @csrf_exempt
@@ -138,7 +133,7 @@ def auth_receiver(request):
         
     except ValueError as e:
         # Invalid token
-        print(f"Token validation error: {e}")
+        logging.error(f"Token validation error: {e}")
         return Response({"error": "Invalid token"}, status=status.HTTP_403_FORBIDDEN)
 
 @api_view(['POST'])
