@@ -133,7 +133,7 @@ def auth_receiver(request):
         
     except ValueError as e:
         # Invalid token
-        print(f"Token validation error: {e}")
+        logging.error(f"Token validation error: {e}")
         return Response({"error": "Invalid token"}, status=status.HTTP_403_FORBIDDEN)
 
 @api_view(['POST'])
