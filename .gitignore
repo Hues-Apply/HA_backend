@@ -81,3 +81,11 @@ media/
 !media/.gitkeep
 static/collected/
 .env
+
+
+# Fork specific
+setup_sync_task.bat
+SYNC_README.md
+syn_repos.bat
+sync_repos.ps1
+sync_repos.sh
