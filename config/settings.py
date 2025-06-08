@@ -36,10 +36,18 @@ SITE_ID = 1
 
 AUTH_USER_MODEL = 'users.CustomUser'
 
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
+if not GOOGLE_OAUTH_CLIENT_ID:
+    raise ValueError(
+        'Google OAuth Client ID not found. Please set it in your environment variables.'
+    )
+
+SECURE_REFERRER_POLICY='no-referrer-when-downgrade'
+SECURE_CROSS_ORIGIN_OPENER_POLICY='same-origin-allow-popups'
+
 # Application definition
 
 INSTALLED_APPS = [
-    'users',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -49,20 +57,14 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_simplejwt.token_blacklist',
+    'corsheaders',
     'opportunities',
     'django.contrib.sites',
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
-    'dj_rest_auth',
-    'dj_rest_auth.registration',
+    'users'
     
 ]
 
-AUTHENTICATION_BACKENDS = [
-    'allauth.account.auth_backends.AuthenticationBackend', #Allauth backend
-]
+
 
 
 REST_FRAMEWORK = {
@@ -76,12 +78,20 @@ REST_FRAMEWORK = {
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # CORS middleware - must come before CommonMiddleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',
+]
+
+# CORS settings
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # React default port
+    "http://127.0.0.1:3000",
+    # Add your frontend production URL when deploying
 ]
 
 ROOT_URLCONF = 'config.urls'

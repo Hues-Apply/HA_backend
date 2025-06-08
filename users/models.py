@@ -44,12 +44,64 @@ class CustomUser(AbstractUser):
     REQUIRED_FIELDS = []
     
     objects = UserManager()
-    
     def generate_otp(self):
         otp = f"{random.randint(100000, 999999)}"
         self.otp = otp
         self.save()
-        return otp
+        return otp  
+    
+    # Role management methods
+    def add_to_role(self, role_name):
+        """Add user to a role (group)"""
+        from django.contrib.auth.models import Group
+        role, _ = Group.objects.get_or_create(name=role_name)
+        self.groups.add(role)
+        return self
+    
+    def remove_from_role(self, role_name):
+        """Remove user from a role (group)"""
+        from django.contrib.auth.models import Group
+        try:
+            role = Group.objects.get(name=role_name)
+            self.groups.remove(role)
+        except Group.DoesNotExist:
+            pass
+        return self
+    
+    def set_as_applicant(self):
+        """Set user as an applicant"""
+        # First remove from other roles
+        self.remove_from_role('Employers')
+        # Then add to applicant role
+        self.add_to_role('Applicants')
+        return self
+    
+    def set_as_employer(self):
+        """Set user as an employer"""
+        # First remove from other roles
+        self.remove_from_role('Applicants')
+        # Then add to employer role
+        self.add_to_role('Employers')
+        return self
+    
+    def is_applicant(self):
+        """Check if user is an applicant"""
+        return self.groups.filter(name='Applicants').exists()
+    
+    def is_employer(self):
+        """Check if user is an employer"""
+        return self.groups.filter(name='Employers').exists()
+        
+    def get_role(self):
+        """Get user's primary role"""
+        if self.is_superuser:
+            return "Administrator"
+        elif self.is_employer():
+            return "Employer"
+        elif self.is_applicant():
+            return "Applicant"
+        else:
+            return "Unassigned"
 
     
 class UserProfile(models.Model):
