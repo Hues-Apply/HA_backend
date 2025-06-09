@@ -2,6 +2,18 @@
 
 This document provides comprehensive documentation for all API endpoints in the HuesApply platform, including authentication, user management, and opportunities.
 
+## Base URL
+
+All API endpoints should be prefixed with the base URL:
+
+- Production: `https://ha-backend-pq2f.vercel.app`
+- Development: `http://localhost:8000`
+
+For example, to access the Google client ID endpoint in production:
+```
+https://ha-backend-pq2f.vercel.app/api/auth/google-client-id/
+```
+
 ## Table of Contents
 
 1. [Authentication APIs](#authentication-apis)
@@ -33,16 +45,41 @@ Used by frontend to retrieve the Google OAuth Client ID.
 }
 ```
 
-#### Google Sign-In Authentication
+#### OAuth 2.0 Flow - Start
 
-Used to authenticate a user with a Google credential token.
+Start the OAuth 2.0 authorization flow by obtaining the authorization URL.
+
+**Endpoint**: `GET /api/auth/google/start/`  
+**Authorization**: None required  
+**Response**:
+```json
+{
+  "auth_url": "https://accounts.google.com/o/oauth2/auth?client_id=...&redirect_uri=..."
+}
+```
+
+#### OAuth 2.0 Flow - Callback
+
+This endpoint handles the redirect from Google's OAuth service.
+
+**Endpoint**: `GET /api/auth/google/callback/`  
+**Authorization**: None required  
+**Query Parameters**:
+- `code`: The authorization code from Google
+- `state`: The state parameter for CSRF prevention
+
+**Response**: Redirects to the frontend with tokens and user data as query parameters
+
+#### OAuth 2.0 Flow - Code Exchange API
+
+Direct API endpoint to exchange an authorization code for tokens (alternative to the redirect flow).
 
 **Endpoint**: `POST /api/auth/google/`  
 **Authorization**: None required  
 **Request Body**:
 ```json
 {
-  "credential": "GOOGLE_ID_TOKEN"
+  "code": "GOOGLE_AUTHORIZATION_CODE"
 }
 ```
 
@@ -320,74 +357,166 @@ Track that a user applied to an opportunity.
 
 ## Frontend Integration Guide
 
-### Authentication Flow
+### Authentication Flow with OAuth 2.0 Redirect
 
-#### 1. Load Google API
-
-Add this script to your HTML:
-```html
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-```
-
-#### 2. Initialize Google Sign-In
+#### 1. Implementing Google Sign-In with OAuth Redirect Flow
 
 ```javascript
-// First get the client ID from your backend
-fetch('/api/auth/google-client-id/')
-  .then(res => res.json())
-  .then(data => {
-    const clientId = data.client_id;
-    
-    // Initialize Google Sign-in
-    google.accounts.id.initialize({
-      client_id: clientId,
-      callback: handleCredentialResponse,
-      auto_select: false,
-      cancel_on_tap_outside: true
-    });
-
-    // Display the button
-    google.accounts.id.renderButton(
-      document.getElementById("googleSignInButton"),
-      { theme: "outline", size: "large", shape: "rectangular" }
-    );
-  });
-```
-
-#### 3. Handle Google Response
-
-```javascript
-function handleCredentialResponse(response) {
-  // Send the credential token to your backend
-  fetch('/api/auth/google/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      credential: response.credential
+// Get the authorization URL from your backend and redirect to Google
+function initiateGoogleSignIn() {
+  fetch('https://ha-backend-pq2f.vercel.app/api/auth/google/start/')
+    .then(res => res.json())
+    .then(data => {
+      // Store state in localStorage for security validation after redirect
+      const authUrl = new URL(data.auth_url);
+      const params = new URLSearchParams(authUrl.search);
+      const state = params.get('state');
+      localStorage.setItem('oauth_state', state);
+      
+      // Redirect to Google's OAuth page
+      window.location.href = data.auth_url;
     })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.error) {
-      console.error('Authentication error:', data.error);
+    .catch(error => {
+      console.error('Error starting OAuth flow:', error);
+    });
+}
+```
+
+#### 2. Handling the OAuth Callback
+
+Create a component to handle the OAuth callback:
+
+```javascript
+// Implement in your callback component (e.g., GoogleAuthCallback.js)
+function handleOAuthCallback() {
+  // Get URL parameters from the callback
+  const urlParams = new URLSearchParams(window.location.search);
+  const accessToken = urlParams.get('access_token');
+  const refreshToken = urlParams.get('refresh_token');
+  const userDataString = urlParams.get('user_data');
+  const error = urlParams.get('error');
+  
+  if (error) {
+    console.error('Authentication error:', error);
+    // Show error to user and redirect to login
+    window.location.href = '/login?error=' + encodeURIComponent(error);
+    return;
+  }
+  
+  if (accessToken && refreshToken) {
+    // Authentication successful!
+    // Store tokens securely
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+    
+    // Parse and store user data
+    if (userDataString) {
+      try {
+        const userData = JSON.parse(userDataString);
+        localStorage.setItem('user', userDataString);
+        
+        // Handle new user if needed
+        if (userData.is_new_user) {
+          window.location.href = '/onboarding';
+          return;
+        }
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+      }
+    }
+    
+    // Redirect to dashboard
+    window.location.href = '/dashboard';
+  } else {
+    // No tokens in URL - try the code exchange API instead
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    const storedState = localStorage.getItem('oauth_state');
+    
+    // Validate state to prevent CSRF attacks
+    if (!state || !storedState || state !== storedState) {
+      console.error('Invalid state parameter. Possible CSRF attack.');
+      window.location.href = '/login?error=invalid_state';
       return;
     }
     
-    // Store tokens securely
-    localStorage.setItem('accessToken', data.access_token);
-    localStorage.setItem('refreshToken', data.refresh_token);
+    // Clear stored state
+    localStorage.removeItem('oauth_state');
     
-    // Store user info (optional)
-    localStorage.setItem('user', JSON.stringify(data.user));
-    
-    // Redirect to dashboard or update UI
-    window.location.href = '/dashboard';
-  })
-  .catch(error => {
-    console.error('Authentication error:', error);
-  });
+    if (code) {
+      // Exchange the code for tokens via the direct API
+      fetch('https://ha-backend-pq2f.vercel.app/api/auth/google/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ code })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          console.error('Authentication error:', data.error);
+          window.location.href = '/login?error=' + encodeURIComponent(data.error);
+          return;
+        }
+        
+        // Store tokens securely
+        localStorage.setItem('accessToken', data.access_token);
+        localStorage.setItem('refreshToken', data.refresh_token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        
+        // Redirect to appropriate page
+        if (data.user.is_new_user) {
+          window.location.href = '/onboarding';
+        } else {
+          window.location.href = '/dashboard';
+        }
+      })
+      .catch(error => {
+        console.error('Authentication error:', error);
+        window.location.href = '/login?error=server_error';
+      });
+    } else {
+      console.error('No authorization code or tokens provided');
+      window.location.href = '/login?error=no_code';
+    }
+  }
+}
+```
+
+#### 3. Google Sign-In Button Component
+
+```jsx
+// React component for Google Sign-In button
+function GoogleSignInButton() {
+  const handleSignInClick = () => {
+    // Start the OAuth flow
+    fetch('https://ha-backend-pq2f.vercel.app/api/auth/google/start/')
+      .then(res => res.json())
+      .then(data => {
+        // Store state in localStorage for security validation after redirect
+        const authUrl = new URL(data.auth_url);
+        const params = new URLSearchParams(authUrl.search);
+        const state = params.get('state');
+        localStorage.setItem('oauth_state', state);
+        
+        // Redirect to Google's OAuth page
+        window.location.href = data.auth_url;
+      });
+  };
+
+  return (
+    <button 
+      className="google-sign-in-button" 
+      onClick={handleSignInClick}
+    >
+      <img 
+        src="/google-icon.svg" 
+        alt="Google logo" 
+      />
+      Sign in with Google
+    </button>
+  );
 }
 ```
 
@@ -395,7 +524,7 @@ function handleCredentialResponse(response) {
 
 ```javascript
 function fetchUserData() {
-  fetch('/api/role/', {
+  fetch('https://ha-backend-pq2f.vercel.app/api/role/', {
     headers: {
       'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
     }
@@ -414,7 +543,7 @@ function fetchUserData() {
 function signOut() {
   const refreshToken = localStorage.getItem('refreshToken');
   
-  fetch('/api/auth/sign-out/', {
+  fetch('https://ha-backend-pq2f.vercel.app/api/auth/sign-out/', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -457,7 +586,7 @@ function fetchOpportunities(page = 1) {
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
     .join('&');
   
-  fetch(`/api/opportunities/?${queryString}`)
+  fetch(`https://ha-backend-pq2f.vercel.app/api/opportunities/?${queryString}`)
     .then(res => res.json())
     .then(data => {
       // Render opportunities list
@@ -473,7 +602,7 @@ function fetchOpportunities(page = 1) {
 
 ```javascript
 function fetchRecommendations() {
-  fetch('/api/opportunities/recommended/', {
+  fetch('https://ha-backend-pq2f.vercel.app/api/opportunities/recommended/', {
     headers: {
       'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
     }
@@ -490,7 +619,7 @@ function fetchRecommendations() {
 
 ```javascript
 function trackOpportunityView(opportunityId) {
-  fetch(`/api/opportunities/${opportunityId}/track_view/`, {
+  fetch(`https://ha-backend-pq2f.vercel.app/api/opportunities/${opportunityId}/track_view/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -499,7 +628,7 @@ function trackOpportunityView(opportunityId) {
 }
 
 function trackOpportunityApplication(opportunityId) {
-  fetch(`/api/opportunities/${opportunityId}/track_application/`, {
+  fetch(`https://ha-backend-pq2f.vercel.app/api/opportunities/${opportunityId}/track_application/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -518,151 +647,3 @@ function trackOpportunityApplication(opportunityId) {
 5. Implement token refresh mechanism for long user sessions
 6. Set appropriate CORS headers for your frontend domain
 7. Validate all user input on both frontend and backend
-  "refresh_token": "JWT_REFRESH_TOKEN",
-  "user": {
-    "id": 123,
-    "email": "user@example.com",
-    "first_name": "John",
-    "last_name": "Doe",
-    "role": "Applicant",
-    "is_new_user": false,
-    "google_data": {
-      "name": "John Doe",
-      "picture": "https://..."
-    }
-  }
-}
-```
-
-**Response (Error - 400/403)**:
-```json
-{
-  "error": "Error message"
-}
-```
-
-### 3. Sign Out
-
-Used to blacklist a JWT refresh token when the user signs out.
-
-**Endpoint**: `POST /api/auth/sign-out/`  
-**Authorization**: JWT Bearer token required  
-**Request Body**:
-```json
-{
-  "refresh_token": "JWT_REFRESH_TOKEN"
-}
-```
-
-**Response (Success - 200 OK)**:
-```json
-{
-  "success": "User logged out successfully"
-}
-```
-
-## Frontend Integration Guide
-
-### 1. Load Google API
-
-Add this script to your HTML:
-```html
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-```
-
-### 2. Initialize Google Sign-In
-
-```javascript
-// First get the client ID from your backend
-fetch('/api/auth/google-client-id/')
-  .then(res => res.json())
-  .then(data => {
-    const clientId = data.client_id;
-    
-    // Initialize Google Sign-in
-    google.accounts.id.initialize({
-      client_id: clientId,
-      callback: handleCredentialResponse,
-      auto_select: false,
-      cancel_on_tap_outside: true
-    });
-
-    // Display the button
-    google.accounts.id.renderButton(
-      document.getElementById("googleSignInButton"),
-      { theme: "outline", size: "large", shape: "rectangular" }
-    );
-  });
-```
-
-### 3. Handle Google Response
-
-```javascript
-function handleCredentialResponse(response) {
-  // Send the credential token to your backend
-  fetch('/api/auth/google/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      credential: response.credential
-    })
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.error) {
-      console.error('Authentication error:', data.error);
-      return;
-    }
-    
-    // Store tokens securely
-    localStorage.setItem('accessToken', data.access_token);
-    localStorage.setItem('refreshToken', data.refresh_token);
-    
-    // Store user info (optional)
-    localStorage.setItem('user', JSON.stringify(data.user));
-    
-    // Redirect to dashboard or update UI
-    window.location.href = '/dashboard';
-  })
-  .catch(error => {
-    console.error('Authentication error:', error);
-  });
-}
-```
-
-### 4. Sign Out
-
-```javascript
-function signOut() {
-  const refreshToken = localStorage.getItem('refreshToken');
-  
-  fetch('/api/auth/sign-out/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-    },
-    body: JSON.stringify({
-      refresh_token: refreshToken
-    })
-  })
-  .then(() => {
-    // Clear local storage
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    
-    // Redirect to home or login
-    window.location.href = '/';
-  });
-}
-```
-
-## Security Considerations
-
-1. Always verify the Google token with Google's servers (done on backend)
-2. Check that the email is verified by Google (done on backend)
-3. Store JWT tokens securely (preferably in HttpOnly cookies for production)
-4. Use HTTPS in production

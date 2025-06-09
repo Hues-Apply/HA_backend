@@ -37,10 +37,21 @@ SITE_ID = 1
 AUTH_USER_MODEL = 'users.CustomUser'
 
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET')
+GOOGLE_OAUTH_REDIRECT_URI = os.environ.get('GOOGLE_OAUTH_REDIRECT_URI', 'http://127.0.0.1:8000/api/auth/google/callback')
+
 if not GOOGLE_OAUTH_CLIENT_ID:
     raise ValueError(
         'Google OAuth Client ID not found. Please set it in your environment variables.'
     )
+
+if not GOOGLE_OAUTH_CLIENT_SECRET:
+    raise ValueError(
+        'Google OAuth Client Secret not found. Please set it in your environment variables.'
+    )
+
+# Frontend URL for redirecting after OAuth flow
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 
 SECURE_REFERRER_POLICY='no-referrer-when-downgrade'
 SECURE_CROSS_ORIGIN_OPENER_POLICY='same-origin-allow-popups'
@@ -90,8 +101,8 @@ MIDDLEWARE = [
 # CORS settings
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # React default port
-    "http://127.0.0.1:3000",
+    "http://localhost:5173",  # React default port
+    "http://127.0.0.1:5173",
     "https://ha-backend-pq2f.vercel.app",
     # Add your frontend production URL when deploying
 ]
