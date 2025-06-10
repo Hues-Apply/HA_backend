@@ -5,11 +5,11 @@ app_name = 'users'
 
 urlpatterns = [
     # API endpoints
-    # Auth endpoints
-    path('api/auth/google/', views.exchange_code, name='google_auth'),  # API endpoint for code exchange
-    path('api/auth/google/start/', views.oauth_start, name='google_oauth_start'),  # Start OAuth flow
-    path('api/auth/google/callback/', views.oauth_callback, name='google_oauth_callback'),  # OAuth callback
-    path('api/auth/google-client-id/', views.get_google_client_id, name='get_google_client_id'),
+    # Auth endpoints - New OAuth 2.0 flow
+    path('api/auth/google/callback/', views.GoogleAuthCallbackView.as_view(), name='google-auth-callback'),  # Main OAuth callback
+    path('api/auth/google/refresh-token/', views.google_refresh_token, name='google-refresh-token'),  # Refresh Google tokens
+    path('api/auth/google-client-id/', views.GoogleClientIDView.as_view(), name='google-client-id'),  # Client ID endpoint
+    
     path('api/auth/sign-out/', views.sign_out, name='sign_out'),
     
     # User registration and management

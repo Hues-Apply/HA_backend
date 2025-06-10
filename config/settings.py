@@ -30,15 +30,20 @@ SECRET_KEY = 'django-insecure-&xr2$*30wm0ovs57&be0r$()np*q3k!*l=!-(x)mi##!c31hdk
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ha-backend-pq2f.vercel.app', '.vercel.app', 'https://ha-frontend-ll6cjywf0-inezerrs-projects.vercel.app']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ha-backend-pq2f.vercel.app', '.vercel.app']
 
 SITE_ID = 1
 
 AUTH_USER_MODEL = 'users.CustomUser'
 
+# Google OAuth Settings
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET')
-GOOGLE_OAUTH_REDIRECT_URI = os.environ.get('GOOGLE_OAUTH_REDIRECT_URI', 'ha-backend-pq2f.vercel.app/api/auth/google/callback')
+GOOGLE_OAUTH_REDIRECT_URI = os.environ.get('GOOGLE_OAUTH_REDIRECT_URI', 'http://127.0.0.1:8000/api/auth/google/callback')
+
+# For compatibility with existing code, also set these as GOOGLE_CLIENT_ID/SECRET
+GOOGLE_CLIENT_ID = GOOGLE_OAUTH_CLIENT_ID
+GOOGLE_CLIENT_SECRET = GOOGLE_OAUTH_CLIENT_SECRET
 
 if not GOOGLE_OAUTH_CLIENT_ID:
     raise ValueError(
@@ -83,7 +88,26 @@ REST_FRAMEWORK = {
     # or allow read-only access for unauthenticated users.
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
-    ]
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+}
+
+# Simple JWT Settings - Using HMAC SHA256 instead of RSA to avoid cryptography issues
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',  # Use HMAC SHA256 instead of RSA algorithms
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
 }
 
 MIDDLEWARE = [
@@ -132,8 +156,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
         'APP' : {
-            'client_id' : os.getenv('GOOGLE_CLIENT_ID'),
-            'secret' : os.getenv('GOOGLE_CLIENT_SECRET'),
+            'client_id' : GOOGLE_CLIENT_ID,
+            'secret' : GOOGLE_CLIENT_SECRET,
         },
         'SCOPE' : ['profile', 'email'],
         'AUTH_PARAMS': {'access_type': 'online'},

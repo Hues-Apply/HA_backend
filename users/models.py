@@ -77,8 +77,7 @@ class CustomUser(AbstractUser):
         return self
     
     def set_as_employer(self):
-        """Set user as an employer"""
-        # First remove from other roles
+        """Set user as an employer"""        # First remove from other roles
         self.remove_from_role('Applicants')
         # Then add to employer role
         self.add_to_role('Employers')
@@ -103,25 +102,24 @@ class CustomUser(AbstractUser):
         else:
             return "Unassigned"
 
+def validate_image_size(image):
+    file_size = image.file.size
+    limit_kb = 500
+    if file_size > limit_kb * 1024:
+        raise ValidationError(f"Image size should not exceed {limit_kb} KB")
     
+def validate_image_format(image):
+    try:
+        img = Image.open(image)
+        if img.format not in ['JPEG', 'PNG']:
+            raise ValidationError("Only JPEG and PNG images are allowed.")
+    except Exception:
+        raise ValidationError("Invalid image format.")
+
+def user_directory_path(instance, filename):
+    return f'profile_pictures/user_{instance.user.id}/{filename}'
+        
 class UserProfile(models.Model):
-    def validate_image_size(image):
-        file_size = image.file.size
-        limit_kb = 500
-        if file_size > limit_kb * 1024:
-            raise ValidationError(f"Image size should not exceed {limit_kb} KB")
-        
-    def validate_image_format(image):
-        try:
-            img = Image.open(image)
-            if img.format not in ['JPEG', 'PNG']:
-                raise ValidationError("Only JPEG and PNG images are allowed.")
-        except Exception:
-            raise ValidationError("Invalid image format.")
-        
-    def user_directory_path(instance, filename):
-        return f'profile_pictures/user_{instance.user.id}/{filename}'
-        
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='profile')
     name = models.CharField(max_length=100, blank=True)
     email = models.EmailField(blank=True)
@@ -129,6 +127,12 @@ class UserProfile(models.Model):
     phone_number = models.CharField(max_length=20, blank=True)
     country = models.CharField(max_length=100, blank=True)
     goal = models.CharField(max_length=100, blank=True)
+    
+    # Google OAuth fields
+    google_id = models.CharField(max_length=255, blank=True, null=True)
+    google_picture = models.URLField(blank=True, null=True)
+    google_access_token = models.TextField(blank=True, null=True)
+    google_refresh_token = models.TextField(blank=True, null=True)
     
    
     

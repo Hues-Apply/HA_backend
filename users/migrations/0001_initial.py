@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('name', models.CharField(blank=True, max_length=100)),
                 ('email', models.EmailField(blank=True, max_length=254)),
-                ('profile_picture', models.ImageField(blank=True, default='profile_pictures/default.jpg', upload_to=users.models.UserProfile.user_directory_path, validators=[users.models.UserProfile.validate_image_size, users.models.UserProfile.validate_image_format])),
+                ('profile_picture', models.ImageField(blank=True, default='profile_pictures/default.jpg', upload_to=users.models.user_directory_path, validators=[users.models.validate_image_size, users.models.validate_image_format])),
                 ('phone_number', models.CharField(blank=True, max_length=20)),
                 ('country', models.CharField(blank=True, max_length=100)),
                 ('goal', models.CharField(blank=True, max_length=100)),
