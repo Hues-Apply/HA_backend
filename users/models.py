@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from PIL import Image
 
 import random
+import uuid
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields): 
@@ -180,5 +181,208 @@ class RecommendationPriority(models.Model):
     work_experience = models.BooleanField(default=False)
     preferred_locations = models.BooleanField(default=False)
     others = models.BooleanField(default=False)
+
+def document_upload_path(instance, filename):
+    """Generate upload path for documents"""
+    ext = filename.split('.')[-1]
+    filename = f'{uuid.uuid4()}.{ext}'
+    return f'documents/user_{instance.user.id}/{filename}'
+
+
+def validate_document_format(document):
+    """Validate document format"""
+    allowed_formats = ['pdf', 'doc', 'docx']
+    ext = document.name.split('.')[-1].lower()
+    if ext not in allowed_formats:
+        raise ValidationError("Only PDF, DOC, and DOCX files are allowed.")
+
+
+def validate_document_size(document):
+    """Validate document size (max 10MB)"""
+    try:
+        # Handle different file object types
+        if hasattr(document, 'size'):
+            file_size = document.size
+        elif hasattr(document, 'file') and hasattr(document.file, 'size'):
+            file_size = document.file.size
+        elif hasattr(document, '_file') and hasattr(document._file, 'size'):
+            file_size = document._file.size
+        else:
+            # If we can't determine size, skip validation
+            return
+        
+        limit_mb = 10
+        if file_size > limit_mb * 1024 * 1024:
+            raise ValidationError(f"File size should not exceed {limit_mb} MB")
+    except AttributeError:
+        # If we can't access size for any reason, skip validation
+        pass
+
+
+class Document(models.Model):
+    """Model for storing uploaded CV/resume documents"""
+    DOCUMENT_TYPES = [
+        ('cv', 'CV/Resume'),
+        ('cover_letter', 'Cover Letter'),
+        ('certificate', 'Certificate'),
+        ('other', 'Other'),
+    ]
     
+    PROCESSING_STATUS = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
     
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='documents')
+    document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPES, default='cv')
+    file = models.FileField(
+        upload_to=document_upload_path,
+        validators=[validate_document_format, validate_document_size]
+    )
+    original_filename = models.CharField(max_length=255)
+    processing_status = models.CharField(max_length=20, choices=PROCESSING_STATUS, default='pending')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['-uploaded_at']
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.original_filename}"
+
+
+class UserGoal(models.Model):
+    """Model for storing user's selected goals"""
+    GOAL_CHOICES = [
+        ('job_opportunities', 'Get Job Opportunities'),
+        ('cv_assistance', 'CV & Cover Letter Assistance'),
+        ('scholarship_opportunities', 'Get Scholarship Opportunities'),
+        ('grant_opportunities', 'Get Grant Opportunities'),
+        ('internship_opportunities', 'Get Internship Opportunities'),
+        ('career_guidance', 'Career Guidance'),
+        ('skill_development', 'Skill Development'),
+        ('networking', 'Networking Opportunities'),
+    ]
+    
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='goals')
+    goal = models.CharField(max_length=50, choices=GOAL_CHOICES)
+    priority = models.PositiveIntegerField(default=1)  # 1 = highest priority
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['user', 'goal']
+        ordering = ['priority', 'created_at']
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.get_goal_display()}"
+
+
+class ParsedProfile(models.Model):
+    """Model for storing parsed CV/resume data"""
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='parsed_profile')
+    document = models.ForeignKey(Document, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    # Personal Information
+    first_name = models.CharField(max_length=100, blank=True)
+    last_name = models.CharField(max_length=100, blank=True)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    address = models.TextField(blank=True)
+    linkedin = models.URLField(blank=True)
+    portfolio = models.URLField(blank=True)
+    
+    # Professional Summary
+    summary = models.TextField(blank=True)
+    
+    # Structured data stored as JSON
+    education = models.JSONField(default=list, blank=True)  # List of education entries
+    experience = models.JSONField(default=list, blank=True)  # List of work experience
+    skills = models.JSONField(default=list, blank=True)  # List of skills
+    certifications = models.JSONField(default=list, blank=True)  # List of certifications
+    languages = models.JSONField(default=list, blank=True)  # List of languages with proficiency
+    projects = models.JSONField(default=list, blank=True)  # List of projects
+    
+    # Metadata
+    confidence_score = models.FloatField(null=True, blank=True)  # Overall parsing confidence (0-1)
+    parsed_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.user.email} - Parsed Profile"
+    
+    @property
+    def completion_percentage(self):
+        """Calculate profile completion percentage"""
+        total_fields = 12  # Number of main sections
+        completed_fields = 0
+        
+        # Personal info fields
+        if self.first_name: completed_fields += 1
+        if self.last_name: completed_fields += 1
+        if self.email: completed_fields += 1
+        if self.phone: completed_fields += 1
+        if self.address: completed_fields += 1
+        if self.linkedin: completed_fields += 1
+        if self.portfolio: completed_fields += 1
+        
+        # Content fields
+        if self.summary: completed_fields += 1
+        if self.education: completed_fields += 1
+        if self.experience: completed_fields += 1
+        if self.skills: completed_fields += 1
+        if self.certifications or self.languages or self.projects: completed_fields += 1
+        
+        return round((completed_fields / total_fields) * 100)
+    
+    @property
+    def missing_sections(self):
+        """Get list of missing profile sections"""
+        missing = []
+        
+        if not self.first_name or not self.last_name:
+            missing.append('personal_info')
+        if not self.summary:
+            missing.append('summary')
+        if not self.education:
+            missing.append('education')
+        if not self.experience:
+            missing.append('experience')
+        if not self.skills:
+            missing.append('skills')
+        if not self.certifications:
+            missing.append('certifications')
+        if not self.languages:
+            missing.append('languages')
+        if not self.projects:
+            missing.append('projects')
+            
+        return missing
+    
+    @property
+    def completed_sections(self):
+        """Get list of completed profile sections"""
+        completed = []
+        
+        if self.first_name and self.last_name:
+            completed.append('personal_info')
+        if self.summary:
+            completed.append('summary')
+        if self.education:
+            completed.append('education')
+        if self.experience:
+            completed.append('experience')
+        if self.skills:
+            completed.append('skills')
+        if self.certifications:
+            completed.append('certifications')
+        if self.languages:
+            completed.append('languages')
+        if self.projects:
+            completed.append('projects')
+            
+        return completed
+

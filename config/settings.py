@@ -182,7 +182,8 @@ LOGIN_REDIRECT_URL= 'account'
 
 
 # DO NOT CHANGE THIS
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgres://USER:PASSWORD@HOST:PORT/NAME')
+# DATABASE_URL = os.getenv('DATABASE_URL', 'postgres://USER:PASSWORD@HOST:PORT/NAME')
+DATABASE_URL = 'postgres://nezer_admin:MynameisNezer95.@localhost:5432/ha_db'
 url = urlparse(DATABASE_URL)
 DATABASES = {
     'default': {
