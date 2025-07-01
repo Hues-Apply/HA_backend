@@ -128,6 +128,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # React default port
     "http://127.0.0.1:5173",
     "https://ha-backend-pq2f.vercel.app",
+    "https://dev.huesapply.com"
     # Add your frontend production URL when deploying
 ]
 
