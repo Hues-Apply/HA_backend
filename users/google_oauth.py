@@ -78,7 +78,8 @@ def get_user_info_from_id_token(id_token):
         id_info = google_id_token.verify_oauth2_token(
             id_token, 
             google_requests.Request(), 
-            settings.GOOGLE_OAUTH_CLIENT_ID
+            settings.GOOGLE_OAUTH_CLIENT_ID,
+            clock_skew_in_seconds=60
         )
         print("✅ [OAUTH] ID token verified successfully")
         print("✅ [OAUTH] ID token verified successfully")

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     CustomUser, UserProfile, CareerProfile, EducationProfile, ExperienceProfile,
-    Document, ParsedProfile, UserGoal
+    Document, ParsedProfile, UserGoal, ProjectsProfile, OpportunitiesInterest, RecommendationPriority
 )
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -19,13 +19,34 @@ class CareerProfileSerializer(serializers.ModelSerializer):
 class EducationProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = EducationProfile
-        fields = ['degree', 'school', 'start_date', 'end_date', 'extra_curricular']
+        fields = ['id', 'degree', 'school', 'start_date', 'end_date', 'is_currently_studying', 'extra_curricular', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
 
 class ExperienceProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExperienceProfile
-        fields = ['job_title', 'company_name', 'location']
+        fields = ['id', 'job_title', 'company_name', 'location', 'start_date', 'end_date', 'is_currently_working', 'description', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class ProjectsProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProjectsProfile
+        fields = ['id', 'project_title', 'start_date', 'end_date', 'is_currently_working', 'project_link', 'description', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class OpportunitiesInterestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OpportunitiesInterest
+        fields = ['scholarships', 'jobs', 'grants', 'internships']
+
+
+class RecommendationPrioritySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RecommendationPriority
+        fields = ['academic_background', 'work_experience', 'preferred_locations', 'others', 'additional_preferences']
 
 
 class CustomUserSerializer(serializers.ModelSerializer):
@@ -158,3 +179,180 @@ class UserGoalUpdateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Goals must be unique")
         
         return validated_goals
+
+class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
+    """Comprehensive serializer that returns all user profile data in one response"""
+    
+    # Personal Info from UserProfile
+    profile_picture = serializers.SerializerMethodField()
+    phone_number = serializers.SerializerMethodField()
+    goal = serializers.SerializerMethodField()
+    
+    # Career Profile
+    career_profile = serializers.SerializerMethodField()
+    
+    # Multiple Education entries
+    education_profiles = EducationProfileSerializer(many=True, read_only=True)
+    
+    # Multiple Experience entries
+    experience_profiles = ExperienceProfileSerializer(many=True, read_only=True)
+    
+    # Multiple Project entries
+    project_profiles = ProjectsProfileSerializer(many=True, read_only=True)
+    
+    # Opportunities Interest
+    opportunities_interest = serializers.SerializerMethodField()
+    
+    # Recommendation Priority
+    recommendation_priority = serializers.SerializerMethodField()
+    
+    # Parsed Profile Data (from CV)
+    parsed_profile_data = serializers.SerializerMethodField()
+    
+    # Goals
+    user_goals = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CustomUser
+        fields = [
+            # Basic user info
+            'id', 'email', 'first_name', 'last_name', 'country', 'date_joined',
+            
+            # Personal info
+            'profile_picture', 'phone_number', 'goal',
+            
+            # Career
+            'career_profile',
+            
+            # Multiple entries
+            'education_profiles',
+            'experience_profiles', 
+            'project_profiles',
+            
+            # Preferences
+            'opportunities_interest',
+            'recommendation_priority',
+            
+            # Parsed profile
+            'parsed_profile_data',
+            
+            # Goals
+            'user_goals'
+        ]
+    
+    def get_profile_picture(self, obj):
+        try:
+            if hasattr(obj, 'profile') and obj.profile.profile_picture:
+                return obj.profile.profile_picture.url
+        except:
+            pass
+        return None
+    
+    def get_phone_number(self, obj):
+        try:
+            if hasattr(obj, 'profile'):
+                return obj.profile.phone_number
+        except:
+            pass
+        return ""
+    
+    def get_goal(self, obj):
+        try:
+            if hasattr(obj, 'profile'):
+                return obj.profile.goal
+        except:
+            pass
+        return ""
+    
+    def get_career_profile(self, obj):
+        try:
+            career = obj.careerprofile
+            return {
+                'industry': career.industry,
+                'job_title': career.job_title,
+                'profile_summary': career.profile_summary
+            }
+        except:
+            return {
+                'industry': '',
+                'job_title': '', 
+                'profile_summary': ''
+            }
+    
+    def get_opportunities_interest(self, obj):
+        try:
+            interest = obj.opportunitiesinterest
+            return {
+                'scholarships': interest.scholarships,
+                'jobs': interest.jobs,
+                'grants': interest.grants,
+                'internships': interest.internships
+            }
+        except:
+            return {
+                'scholarships': False,
+                'jobs': False,
+                'grants': False,
+                'internships': False
+            }
+    
+    def get_recommendation_priority(self, obj):
+        try:
+            priority = obj.recommendationpriority
+            return {
+                'academic_background': priority.academic_background,
+                'work_experience': priority.work_experience,
+                'preferred_locations': priority.preferred_locations,
+                'others': priority.others,
+                'additional_preferences': priority.additional_preferences
+            }
+        except:
+            return {
+                'academic_background': False,
+                'work_experience': False,
+                'preferred_locations': False,
+                'others': False,
+                'additional_preferences': ''
+            }
+    
+    def get_parsed_profile_data(self, obj):
+        try:
+            if hasattr(obj, 'parsed_profile'):
+                parsed_profile = obj.parsed_profile
+                return {
+                    'first_name': parsed_profile.first_name,
+                    'last_name': parsed_profile.last_name,
+                    'email': parsed_profile.email,
+                    'phone': parsed_profile.phone,
+                    'address': parsed_profile.address,
+                    'linkedin': parsed_profile.linkedin,
+                    'portfolio': parsed_profile.portfolio,
+                    'summary': parsed_profile.summary,
+                    'education': parsed_profile.education,
+                    'experience': parsed_profile.experience,
+                    'skills': parsed_profile.skills,
+                    'certifications': parsed_profile.certifications,
+                    'languages': parsed_profile.languages,
+                    'projects': parsed_profile.projects,
+                    'confidence_score': parsed_profile.confidence_score,
+                    'completion_percentage': parsed_profile.completion_percentage,
+                    'missing_sections': parsed_profile.missing_sections,
+                    'completed_sections': parsed_profile.completed_sections,
+                }
+        except:
+            pass
+        return None
+    
+    def get_user_goals(self, obj):
+        try:
+            goals = obj.goals.all().order_by('priority')
+            return [
+                {
+                    'goal': goal.goal,
+                    'goal_display': goal.get_goal_display(),
+                    'priority': goal.priority
+                }
+                for goal in goals
+            ]
+        except:
+            return []

@@ -17,15 +17,27 @@ urlpatterns = [
     # User registration and management
     path('api/register/', views.register_user, name='register'),
     path('api/role/', views.UserRoleAPIView.as_view(), name='user_role_api'),
-    
-    # Temporary user management endpoints
+      # Temporary user management endpoints
     path('api/users/google-signups/', profile_views.google_signups_list, name='google-signups-list'),
     path('api/users/<int:user_id>/delete/', profile_views.delete_user, name='delete-user'),
     
     # Profile Management endpoints
-    path('api/profile/upload-document/', profile_views.DocumentUploadView.as_view(), name='upload-document'),
+    path('api/profile/upload-document-file/', profile_views.DocumentUploadView.as_view(), name='upload-document-file'),
     path('api/profile/update-parsed/', profile_views.update_parsed_profile, name='update-parsed-profile'),
+    path('api/profile/get-parsed/', profile_views.get_parsed_profile, name='get-parsed-profile'),
+    path('api/profile/comprehensive/', profile_views.get_comprehensive_user_profile, name='get-comprehensive-profile'),
     path('api/profile/completion-status/', profile_views.profile_completion_status, name='profile-completion-status'),
     path('api/profile/update-goals/', profile_views.update_user_goals, name='update-user-goals'),
     path('api/profile/goals/', profile_views.get_user_goals, name='get-user-goals'),
+    
+    # Personal profile management
+    path('api/profile/personal/', profile_views.manage_personal_profile, name='manage-personal-profile'),
+    
+    # Individual Profile Section Management
+    path('api/profile/education/', profile_views.create_education_profile, name='create-education-profile'),
+    path('api/profile/experience/', profile_views.create_experience_profile, name='create-experience-profile'),
+    path('api/profile/project/', profile_views.create_project_profile, name='create-project-profile'),
+    path('api/profile/career/', profile_views.manage_career_profile, name='manage-career-profile'),
+    path('api/profile/opportunities-interest/', profile_views.manage_opportunities_interest, name='manage-opportunities-interest'),
+    path('api/profile/recommendation-priority/', profile_views.manage_recommendation_priority, name='manage-recommendation-priority'),
 ]

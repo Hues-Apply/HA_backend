@@ -144,29 +144,44 @@ class CareerProfile(models.Model):
     profile_summary = models.TextField()
     
 class EducationProfile(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='education_profiles')
     degree = models.CharField(max_length=100)
     school = models.CharField(max_length=100)
     start_date = models.DateField()
-    end_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    is_currently_studying = models.BooleanField(default=False)
     extra_curricular = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-start_date']
     
 class ExperienceProfile(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='experience_profiles')
     job_title = models.CharField(max_length=100)
     company_name = models.CharField(max_length=100)
     location = models.CharField(max_length=100)
     start_date = models.DateField()
-    end_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    is_currently_working = models.BooleanField(default=False)
     description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-start_date']
     
 class ProjectsProfile(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='project_profiles')
     project_title = models.CharField(max_length=200)
     start_date = models.DateField()
-    end_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    is_currently_working = models.BooleanField(default=False)
     project_link = models.URLField(blank=True)
     description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-start_date']
     
 class OpportunitiesInterest(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
@@ -181,6 +196,7 @@ class RecommendationPriority(models.Model):
     work_experience = models.BooleanField(default=False)
     preferred_locations = models.BooleanField(default=False)
     others = models.BooleanField(default=False)
+    additional_preferences = models.TextField(blank=True, help_text="Additional preferences for recommendations")
 
 def document_upload_path(instance, filename):
     """Generate upload path for documents"""
@@ -225,11 +241,11 @@ class Document(models.Model):
         ('cv', 'CV/Resume'),
         ('cover_letter', 'Cover Letter'),
         ('certificate', 'Certificate'),
-        ('other', 'Other'),
-    ]
+        ('other', 'Other'),    ]
     
     PROCESSING_STATUS = [
         ('pending', 'Pending'),
+        ('uploaded', 'Uploaded'),
         ('processing', 'Processing'),
         ('completed', 'Completed'),
         ('failed', 'Failed'),
