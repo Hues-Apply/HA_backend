@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-&xr2$*30wm0ovs57&be0r$()np*q3k!*l=!-(x)mi##!c31hdk
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ha-backend-pq2f.vercel.app', '.vercel.app', 'dev.huesapply.com', 'backend.huesapply.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ha-backend-pq2f.vercel.app', '.vercel.app', '.huesapply.com']
 
 SITE_ID = 1
 
