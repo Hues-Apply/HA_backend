@@ -36,6 +36,13 @@ class Tag(models.Model):
         return self.name
 
 
+from django.db import models
+from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
+from django.contrib.postgres.search import SearchVector, SearchVectorField
+from django.core.cache import cache
+from opportunities.models import Category, Tag
+
 class Opportunity(models.Model):
     OPPORTUNITY_TYPES = (
         ('job', 'Job'),
@@ -45,14 +52,26 @@ class Opportunity(models.Model):
         ('fellowship', 'Fellowship'),
     )
 
+    EXPERIENCE_CHOICES = [
+        ('entry', 'Entry Level'),
+        ('mid', 'Mid Level'),
+        ('senior', 'Senior Level'),
+    ]
+
     title = models.CharField(max_length=255, db_index=True)
     type = models.CharField(max_length=20, choices=OPPORTUNITY_TYPES, db_index=True)
     organization = models.CharField(max_length=255)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='opportunities')
     location = models.CharField(max_length=100, db_index=True)
     is_remote = models.BooleanField(default=False)
+    experience_level = models.CharField( 
+        max_length=20,
+        choices=EXPERIENCE_CHOICES,
+        default='entry',
+        db_index=True
+    )
     description = models.TextField()
-    eligibility_criteria = JSONField(default=dict)
+    eligibility_criteria = models.JSONField(default=dict)
     skills_required = ArrayField(models.CharField(max_length=50), blank=True, default=list)
     tags = models.ManyToManyField(Tag, related_name='opportunities', blank=True)
     deadline = models.DateField(db_index=True)
@@ -65,6 +84,13 @@ class Opportunity(models.Model):
     application_count = models.PositiveIntegerField(default=0)
     application_url = models.URLField(blank=True)
     application_process = models.TextField(blank=True)
+    posted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="opportunities_posted",
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return f"{self.title} ({self.get_type_display()}) - {self.organization}"
@@ -85,12 +111,4 @@ class Opportunity(models.Model):
             models.Index(fields=['type', 'deadline']),
             models.Index(fields=['location']),
         ]
-        
-    posted_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="opportunities_posted",
-        null=True,
-        blank=True
-    )
 

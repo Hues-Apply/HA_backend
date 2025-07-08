@@ -1,0 +1,25 @@
+[33m7688d8d[m[33m ([m[1;36mHEAD -> [m[1;32mopportunity-matching-engine[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Merge pull request #6 from Hues-Apply/googleauth
+[33mf857e19[m Update users/api/views.py
+[33ma15c3c6[m Update users/api/views.py
+[33m410b06a[m Update users/api/views.py
+[33m383f741[m Merge branch 'main' into googleauth
+[33mc16f436[m modify users & google auth
+[33m79c0e15[m Merge pull request #5 from Hues-Apply:fix/db_config
+[33mc6984dd[m Merge branch 'main' into fix/db_config
+[33mb1b8b38[m Merge pull request #4 from Hues-Apply/opportunity-matching-engine
+[33ma563c9e[m Refactor settings.py: Clean up commented code and update database configuration
+[33m891e23c[m[33m ([m[1;31morigin/opportunity-matching-engine[m[33m)[m Implement rule-based matching algorithm and recommendation API
+[33m82faaea[m Implement rule-based matching algorithm and recommendation API
+[33m6d6c701[m Merge pull request #1 from Hues-Apply/opportunity-matching-engine
+[33me8c0976[m Merge branch 'main' into opportunity-matching-engine
+[33m1c4d88a[m Merge remote-tracking branch 'origin/main' into opportunity-matching-engine
+[33ma44191b[m[33m ([m[1;32mmain[m[33m)[m Merge pull request #2 from Hues-Apply/users
+[33mc0e3ed7[m[33m ([m[1;31morigin/users[m[33m)[m Update users/models.py
+[33md5bd3eb[m Update users/views.py
+[33m6b98763[m Merge pull request #3 from Hues-Apply/feat/db-connection
+[33m6e3320c[m[33m ([m[1;31morigin/feat/db-connection[m[33m)[m Setup PostgreSQL connection and updated settings with .env support
+[33m410e98d[m user profile setup
+[33mb7ac1da[m models, authentication, authorization
+[33me7f6024[m Implement Opportunity Database & API
+[33ma83025c[m Add README.md with project overview, tech stack, and development guidelines
+[33mfa26f0b[m Add initial Django project structure with core, applications, payments, and users modules

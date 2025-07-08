@@ -8,10 +8,10 @@ from django.db import transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 
-from .models import Document, ParsedProfile, UserGoal, CustomUser
+from .models import Document, ParsedProfile, ProjectsProfile, UserGoal, CustomUser
 from .serializers import (
-    DocumentSerializer, ParsedProfileSerializer, 
-    ProfileCompletionSerializer, UserGoalUpdateSerializer, UserGoalSerializer
+    DocumentSerializer, EducationProfileSerializer, ParsedProfileSerializer, 
+    ProfileCompletionSerializer, ProjectsProfileSerializer, UserGoalUpdateSerializer, UserGoalSerializer
 )
 
 
@@ -299,18 +299,16 @@ def get_comprehensive_user_profile(request):
 def create_education_profile(request):
     """Create a new education entry"""
     try:
-        from .serializers import EducationProfileSerializer
-        
-        serializer = EducationProfileSerializer(data=request.data)
+        serializer = EducationProfileSerializer(data=request.data, context={'request': request})  
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            serializer.save()  
             return Response({
                 'success': True,
                 'data': serializer.data
             }, status=status.HTTP_201_CREATED)
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
     except Exception as e:
         return Response({
             'error': f'Failed to create education profile: {str(e)}'
@@ -321,47 +319,90 @@ def create_education_profile(request):
 @permission_classes([IsAuthenticated])
 def create_experience_profile(request):
     """Create a new experience entry"""
+    from .serializers import ExperienceProfileSerializer
     try:
-        from .serializers import ExperienceProfileSerializer
-        
-        serializer = ExperienceProfileSerializer(data=request.data)
+        serializer = ExperienceProfileSerializer(data=request.data, context={'request': request})  
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            serializer.save()
             return Response({
                 'success': True,
                 'data': serializer.data
             }, status=status.HTTP_201_CREATED)
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
     except Exception as e:
         return Response({
             'error': f'Failed to create experience profile: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+# @api_view(['POST'])
+# @permission_classes([IsAuthenticated])
+# def create_project_profile(request):
+#     """Create a new project entry"""
+#     try:
+#         from .serializers import ProjectsProfileSerializer
+        
+#         serializer = ProjectsProfileSerializer(data=request.data)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response({
+#                 'success': True,
+#                 'data': serializer.data
+#             }, status=status.HTTP_201_CREATED)
+        
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+#     except Exception as e:
+#         return Response({
+#             'error': f'Failed to create project profile: {str(e)}'
+#         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_project_profile(request):
     """Create a new project entry"""
     try:
-        from .serializers import ProjectsProfileSerializer
-        
-        serializer = ProjectsProfileSerializer(data=request.data)
+        serializer = ProjectsProfileSerializer(data=request.data, context={'request': request})
+
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            serializer.save()
             return Response({
                 'success': True,
                 'data': serializer.data
             }, status=status.HTTP_201_CREATED)
-        
+
+        # ✅ Print exact field-level errors to terminal
+        print("❌ Serializer errors:", serializer.errors)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         return Response({
             'error': f'Failed to create project profile: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+@api_view(['PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def project_detail_view(request, pk):
+    try:
+        project = ProjectsProfile.objects.get(pk=pk, user=request.user)
+    except ProjectsProfile.DoesNotExist:
+        return Response({'error': 'Project not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    if request.method == 'PUT':
+        serializer = ProjectsProfileSerializer(project, data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({'success': True, 'data': serializer.data})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.method == 'DELETE':
+        project.delete()
+        return Response({'success': True, 'message': 'Project deleted'})
 
 @api_view(['POST', 'GET'])
 @permission_classes([IsAuthenticated])

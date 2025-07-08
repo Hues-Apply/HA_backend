@@ -13,13 +13,12 @@ class TagSerializer(serializers.ModelSerializer):
         model = Tag
         fields = ['id', 'name', 'slug']
 
+
 class OpportunitySerializer(serializers.ModelSerializer):
-    # For readable output
     category = CategorySerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
     posted_by = serializers.StringRelatedField(read_only=True)
 
-    # For input (write)
     category_id = serializers.PrimaryKeyRelatedField(
         source='category', queryset=Category.objects.all(), write_only=True
     )
@@ -30,8 +29,14 @@ class OpportunitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Opportunity
         fields = [
-            'id', 'title', 'type', 'organization', 'category', 'category_id', 'location', 'is_remote', 'description', 'eligibility_criteria', 'skills_required', 'tags', 'tag_ids', 'deadline', 'created_at', 'is_verified', 'is_featured', 'application_url', 'application_process', 'posted_by'
+            'id', 'title', 'type', 'organization', 'category', 'category_id',
+            'location', 'is_remote', 'experience_level',
+            'description', 'eligibility_criteria', 'skills_required',
+            'tags', 'tag_ids', 'deadline', 'created_at',
+            'is_verified', 'is_featured', 'application_url',
+            'application_process', 'posted_by'
         ]
+
 
 class OpportunityRecommendationSerializer(serializers.Serializer):
     id = serializers.IntegerField(source='opportunity.id')
@@ -42,13 +47,14 @@ class OpportunityRecommendationSerializer(serializers.Serializer):
     location = serializers.CharField(source='opportunity.location')
     is_remote = serializers.BooleanField(source='opportunity.is_remote')
     deadline = serializers.DateField(source='opportunity.deadline')
+    experience_level = serializers.CharField(source='opportunity.experience_level')
     score = serializers.IntegerField()
     reasons = serializers.DictField()
-    
-    def get_category(self, obj):
-        return {
-            'id': obj['opportunity'].category.id,
-            'name': obj['opportunity'].category.name,
-            'slug': obj['opportunity'].category.slug
-        }
 
+    def get_category(self, obj):
+        category = obj['opportunity'].category
+        return {
+            'id': category.id,
+            'name': category.name,
+            'slug': category.slug
+        }
