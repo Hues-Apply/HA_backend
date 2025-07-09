@@ -91,18 +91,22 @@ class OpportunityMatcher:
         user_education = self.user_profile.education
         user_preferences = self.user_profile.preferences
         user_location = self.user_profile.location.lower()
-
+        user_experience_summary = self.user_profile.summary
+        
         for opportunity in queryset:
             skills_score = self._calculate_skills_score(user_skills, opportunity.skills_required)
             location_score = self._calculate_location_score(opportunity, user_location)
             education_score = 1 if self._check_eligibility(opportunity.eligibility_criteria, user_education) else 0
             preferences_score = self._calculate_preference_score(user_preferences, opportunity)
 
+            experience_score = self._calculate_experience_score(user_experience_summary, opportunity)
+        
             total_score = (
                 self.weights['skills_match'] * skills_score +
                 self.weights['location_match'] * location_score +
                 self.weights['education_match'] * education_score +
-                self.weights['preferences_match'] * preferences_score
+                self.weights['preferences_match'] * preferences_score +
+                self.weights['experience_match'] * experience_score
             )
 
             # Apply boosts
@@ -123,6 +127,7 @@ class OpportunityMatcher:
                     'location_match': round(location_score * 100),
                     'eligibility': "Eligible" if education_score else "Not eligible",
                     'preference_match': round(preferences_score * 100),
+                    'experience_match': round(experience_score * 100),
                 }
             })
 
@@ -179,3 +184,25 @@ class OpportunityMatcher:
             return False
 
         return True
+
+    def _calculate_experience_score(self, summary_text, opportunity):
+        """
+        Simple keyword matching between user's summary and opportunity title/tags.
+        """
+        if not summary_text:
+            return 0
+
+        summary_text = summary_text.lower()
+        opportunity_keywords = set(opportunity.title.lower().split())
+
+        if hasattr(opportunity, 'tags'):
+            opportunity_keywords.update(
+                tag.name.lower() for tag in opportunity.tags.all()
+            )
+
+        match_count = sum(1 for kw in opportunity_keywords if kw in summary_text)
+
+        if not opportunity_keywords:
+            return 0.5
+
+        return match_count / len(opportunity_keywords)
