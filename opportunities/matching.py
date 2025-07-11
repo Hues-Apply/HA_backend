@@ -102,7 +102,6 @@ class OpportunityMatcher:
             location_score = self._calculate_location_score(opportunity, user_location)
             education_score = 1 if self._check_eligibility(opportunity.eligibility_criteria, user_education) else 0
             preferences_score = self._calculate_preference_score(user_preferences, opportunity)
-
             experience_score = self._calculate_experience_score(experience_summary, opportunity)
         
             total_score = (
