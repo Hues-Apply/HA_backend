@@ -11,6 +11,8 @@ class OpportunityMatcher:
     their profile data, preferences, and the opportunity requirements.
     """
 
+    DEFAULT_KEYWORD_SCORE = 0.5 
+    
     def __init__(self, user_profile):
         self.user_profile = user_profile
         self.weights = {
@@ -18,6 +20,7 @@ class OpportunityMatcher:
             'location_match': 0.2,
             'education_match': 0.25,
             'preferences_match': 0.15,
+            'experience_match': 0.15,
         }
 
     def get_recommended_opportunities(self, limit=20, offset=0, filters=None):
@@ -30,7 +33,7 @@ class OpportunityMatcher:
         if cached_result and not filters:
             return cached_result[offset:offset + limit]
 
-        queryset = Opportunity.objects.filter(
+        queryset = Opportunity.objects.prefetch_related('tags').filter(
             deadline__gte=timezone.now().date()
         )
 
@@ -91,18 +94,22 @@ class OpportunityMatcher:
         user_education = self.user_profile.education
         user_preferences = self.user_profile.preferences
         user_location = self.user_profile.location.lower()
-
+        experience_summary = self.user_profile.summary
+        
+        
         for opportunity in queryset:
             skills_score = self._calculate_skills_score(user_skills, opportunity.skills_required)
             location_score = self._calculate_location_score(opportunity, user_location)
             education_score = 1 if self._check_eligibility(opportunity.eligibility_criteria, user_education) else 0
             preferences_score = self._calculate_preference_score(user_preferences, opportunity)
-
+            experience_score = self._calculate_experience_score(experience_summary, opportunity)
+        
             total_score = (
                 self.weights['skills_match'] * skills_score +
                 self.weights['location_match'] * location_score +
                 self.weights['education_match'] * education_score +
-                self.weights['preferences_match'] * preferences_score
+                self.weights['preferences_match'] * preferences_score +
+                self.weights['experience_match'] * experience_score
             )
 
             # Apply boosts
@@ -123,6 +130,7 @@ class OpportunityMatcher:
                     'location_match': round(location_score * 100),
                     'eligibility': "Eligible" if education_score else "Not eligible",
                     'preference_match': round(preferences_score * 100),
+                    'experience_match': round(experience_score * 100),
                 }
             })
 
@@ -179,3 +187,29 @@ class OpportunityMatcher:
             return False
 
         return True
+
+    def _calculate_experience_score(self, summary_text, opportunity):
+        """
+        Scores experience based on keyword overlap between user's summary and opportunity title/tags.
+        Performs basic substring matching. Returns fallback score if no keywords found.
+        """
+
+        if not summary_text:
+            return 0
+
+        summary_text = summary_text.lower()
+        opportunity_keywords = set(opportunity.title.lower().split())
+
+        if hasattr(opportunity, 'tags'):    
+            for tag in opportunity.tags.all():
+                opportunity_keywords.update(
+                word.lower() for word in tag.name.split()
+            )
+
+
+        match_count = sum(1 for kw in opportunity_keywords if kw in summary_text)
+
+        if not opportunity_keywords:
+            return self.DEFAULT_KEYWORD_SCORE
+
+        return match_count / len(opportunity_keywords)
