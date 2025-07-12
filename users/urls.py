@@ -37,6 +37,7 @@ urlpatterns = [
     path('api/profile/education/', profile_views.create_education_profile, name='create-education-profile'),
     path('api/profile/experience/', profile_views.create_experience_profile, name='create-experience-profile'),
     path('api/profile/project/', profile_views.create_project_profile, name='create-project-profile'),
+    path('profile/project/<int:pk>/', profile_views.project_detail_view),
     path('api/profile/career/', profile_views.manage_career_profile, name='manage-career-profile'),
     path('api/profile/opportunities-interest/', profile_views.manage_opportunities_interest, name='manage-opportunities-interest'),
     path('api/profile/recommendation-priority/', profile_views.manage_recommendation_priority, name='manage-recommendation-priority'),
