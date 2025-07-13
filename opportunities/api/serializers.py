@@ -1,5 +1,9 @@
 from rest_framework import serializers
 from opportunities.models import Category, Tag, Opportunity
+import re
+from datetime import datetime, timedelta
+from django.utils import timezone
+from django.utils.text import slugify
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -58,3 +62,4 @@ class OpportunityRecommendationSerializer(serializers.Serializer):
             'name': category.name,
             'slug': category.slug
         }
+

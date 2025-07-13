@@ -84,13 +84,29 @@ class Opportunity(models.Model):
     application_count = models.PositiveIntegerField(default=0)
     application_url = models.URLField(blank=True)
     application_process = models.TextField(blank=True)
-    posted_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="opportunities_posted",
-        null=True,
-        blank=True
-    )
+    
+    # Salary fields
+    salary_min = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    salary_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    salary_currency = models.CharField(max_length=3, default='USD', blank=True)
+    salary_period = models.CharField(max_length=20, choices=[
+        ('hourly', 'Per Hour'),
+        ('daily', 'Per Day'),
+        ('weekly', 'Per Week'),
+        ('monthly', 'Per Month'),
+        ('yearly', 'Per Year'),
+    ], default='yearly', blank=True)
+    
+    # Additional fields for bulk import
+    external_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
+    source = models.CharField(max_length=50, default='manual', choices=[
+        ('manual', 'Manual Entry'),
+        ('linkedin', 'LinkedIn'),
+        ('indeed', 'Indeed'),
+        ('glassdoor', 'Glassdoor'),
+        ('other', 'Other Source'),
+    ])
+    import_batch_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
 
     def __str__(self):
         return f"{self.title} ({self.get_type_display()}) - {self.organization}"
@@ -100,8 +116,7 @@ class Opportunity(models.Model):
         Opportunity.objects.filter(pk=self.pk).update(
             search_vector=SearchVector('title', 'description', 'organization')
         )
-        cache_keys = [f'user_recommendations_{user_id}' for user_id in range(1, 1000)]
-        cache.delete_many(cache_keys)
+        cache.delete_pattern('recommendations_*')
 
     class Meta:
         verbose_name_plural = "Opportunities"

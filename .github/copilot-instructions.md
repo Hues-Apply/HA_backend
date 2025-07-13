@@ -157,3 +157,4 @@ except Exception as e:
 - Make the implementation efficient and optimized for performance.
 - Ensure that all API endpoints are well-documented and follow RESTful principles.
 - Don't write code that I didn't explicitly ask for, even if it is necessary to complete the task at hand.
+- Do not write md files or documentation unless explicitly requested.
