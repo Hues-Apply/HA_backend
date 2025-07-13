@@ -97,8 +97,7 @@ class Opportunity(models.Model):
         Opportunity.objects.filter(pk=self.pk).update(
             search_vector=SearchVector('title', 'description', 'organization')
         )
-        cache_keys = [f'user_recommendations_{user_id}' for user_id in range(1, 1000)]
-        cache.delete_many(cache_keys)
+        cache.delete_pattern('recommendations_*')
 
     class Meta:
         verbose_name_plural = "Opportunities"
