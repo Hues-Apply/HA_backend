@@ -52,38 +52,62 @@ class OpportunityMatcher:
             cache.set(cache_key, sorted_results, 60 * 30)  
 
         return sorted_results[offset:offset + limit]
+    
+def _apply_filters(self, queryset, filters):
+    """
+    Apply user-specified filters to the queryset.
+    """
+    if 'type' in filters:
+        queryset = queryset.filter(type=filters['type'])
 
-    def _apply_filters(self, queryset, filters):
-        """
-        Apply user-specified filters to the queryset.
-        """
-        if 'type' in filters:
-            queryset = queryset.filter(type=filters['type'])
+    if 'location' in filters:
+        queryset = queryset.filter(
+            Q(location__icontains=filters['location']) |
+            Q(is_remote=True)
+        )
 
-        if 'location' in filters:
-            queryset = queryset.filter(
-                Q(location__icontains=filters['location']) |
-                Q(is_remote=True)
-            )
+    if 'category' in filters:
+        queryset = queryset.filter(category__slug=filters['category'])
 
-        if 'category' in filters:
-            queryset = queryset.filter(category__slug=filters['category'])
+    if 'tags' in filters:
+        for tag in filters['tags']:
+            queryset = queryset.filter(tags__slug=tag)
 
-        if 'tags' in filters:
-            for tag in filters['tags']:
-                queryset = queryset.filter(tags__slug=tag)
+    if 'skills' in filters:
+        for skill in filters['skills']:
+            queryset = queryset.filter(skills_required__contains=[skill])
 
-        if 'skills' in filters:
-            for skill in filters['skills']:
-                queryset = queryset.filter(skills_required__contains=[skill])
+    if 'deadline_after' in filters:
+        queryset = queryset.filter(deadline__gte=filters['deadline_after'])
 
-        if 'deadline_after' in filters:
-            queryset = queryset.filter(deadline__gte=filters['deadline_after'])
+    if 'deadline_before' in filters:
+        queryset = queryset.filter(deadline__lte=filters['deadline_before'])
 
-        if 'deadline_before' in filters:
-            queryset = queryset.filter(deadline__lte=filters['deadline_before'])
+    if 'education_level' in filters:
+        queryset = queryset.filter(eligibility_criteria__education_level=filters['education_level'])
 
-        return queryset
+    if 'posted_within' in filters:
+        now = timezone.now()
+        posted_within = filters['posted_within']
+        if posted_within == 'today':
+            since = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            queryset = queryset.filter(created_at__gte=since)
+        elif posted_within == 'this_week':
+            start_of_week = now - timezone.timedelta(days=now.weekday())
+            queryset = queryset.filter(created_at__gte=start_of_week)
+        elif posted_within == 'this_month':
+            since = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            queryset = queryset.filter(created_at__gte=since)
+        elif posted_within.endswith('h'):
+            try:
+                hours = int(posted_within.replace('h', ''))
+                since = now - timezone.timedelta(hours=hours)
+                queryset = queryset.filter(created_at__gte=since)
+            except ValueError:
+                pass
+
+    return queryset
+
 
     def _score_opportunities(self, queryset):
         """

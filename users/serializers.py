@@ -15,25 +15,41 @@ class CareerProfileSerializer(serializers.ModelSerializer):
         model = CareerProfile
         fields = ['industry', 'job_title', 'profile_summary']
 
-
 class EducationProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = EducationProfile
-        fields = ['id', 'degree', 'school', 'start_date', 'end_date', 'is_currently_studying', 'extra_curricular', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        fields = [
+            'id', 'degree', 'school', 'start_date', 'end_date',
+            'is_currently_studying', 'extra_curricular', 'created_at', 'user'
+        ]
+        read_only_fields = ['id', 'created_at', 'user']  
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user  
+        return super().create(validated_data)
 
 
 class ExperienceProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExperienceProfile
-        fields = ['id', 'job_title', 'company_name', 'location', 'start_date', 'end_date', 'is_currently_working', 'description', 'created_at']
+        fields = [
+            'id', 'job_title', 'company_name', 'location',
+            'start_date', 'end_date', 'is_currently_working',
+            'description', 'created_at'
+        ]
         read_only_fields = ['id', 'created_at']
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
 
 
 class ProjectsProfileSerializer(serializers.ModelSerializer):
+    user = serializers.HiddenField(default=serializers.CurrentUserDefault())
+
     class Meta:
         model = ProjectsProfile
-        fields = ['id', 'project_title', 'start_date', 'end_date', 'is_currently_working', 'project_link', 'description', 'created_at']
+        fields = ['id', 'project_title', 'start_date', 'end_date', 'is_currently_working', 'project_link', 'description', 'created_at','user']
         read_only_fields = ['id', 'created_at']
 
 
