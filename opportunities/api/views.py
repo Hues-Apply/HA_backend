@@ -22,7 +22,7 @@ from .serializers import (
     JobScrapingRequestSerializer
 )
 from opportunities.matching import OpportunityMatcher
-from opportunities.models import Opportunity
+from opportunities.models import Opportunity, OpportunityApplication
 
 
 class OpportunityPagination(PageNumberPagination):
@@ -125,6 +125,20 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                 pass
 
         return queryset
+    
+    def retrieve(self, request, *args, **kwargs):
+        """
+        When user views detail page of an opportunity, track it as applied
+        """
+        instance = self.get_object()
+        user = request.user
+
+        if user.is_authenticated:
+            OpportunityApplication.objects.get_or_create(user=user, opportunity=instance)
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
 
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
     def recommended(self, request):
