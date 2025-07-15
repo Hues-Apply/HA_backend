@@ -11,11 +11,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 import hashlib
 import json
-from datetime import timedelta
+import uuid
+import re
+from datetime import timedelta, datetime
+from django.db import transaction
 from .serializers import (
     OpportunitySerializer, 
     OpportunityRecommendationSerializer, 
-    BulkJobCreateSerializer
+    BulkJobCreateSerializer,
+    JobScrapingRequestSerializer
 )
 from opportunities.matching import OpportunityMatcher
 from opportunities.models import Opportunity
@@ -28,6 +32,54 @@ class OpportunityPagination(PageNumberPagination):
 
 
 class OpportunityViewSet(viewsets.ModelViewSet):
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
+    def from_jobs_json(self, request):
+        """
+        Loads and merges opportunities from jobs.json and jobs_glassdoor.json, returns as a list.
+        This is for development/testing/demo purposes only.
+        """
+        import os
+        import json
+        from django.conf import settings
+        from .serializers import SimpleJobSerializer
+
+        base_dir = os.path.dirname(__file__)
+        jobs_json_path = os.path.join(base_dir, 'jobs.json')
+        glassdoor_json_path = os.path.join(base_dir, 'jobs_glassdoor.json')
+
+        jobs = []
+
+        # Load jobs.json
+        if os.path.exists(jobs_json_path):
+            with open(jobs_json_path, 'r', encoding='utf-8') as f:
+                try:
+                    jobs_data = json.load(f)
+                    # jobs.json: if dict with 'data' key, use that
+                    if isinstance(jobs_data, dict) and 'data' in jobs_data:
+                        jobs += jobs_data['data']
+                    else:
+                        jobs += jobs_data
+                except Exception as e:
+                    return Response({"error": f"Failed to parse jobs.json: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        # If not found, skip
+
+        # Load jobs_glassdoor.json
+        if os.path.exists(glassdoor_json_path):
+            with open(glassdoor_json_path, 'r', encoding='utf-8') as f:
+                try:
+                    glassdoor_data = json.load(f)
+                    # jobs_glassdoor.json is a list
+                    if isinstance(glassdoor_data, list):
+                        jobs += glassdoor_data
+                except Exception as e:
+                    return Response({"error": f"Failed to parse jobs_glassdoor.json: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not jobs:
+            return Response({"error": "No jobs found in either file."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Use SimpleJobSerializer(many=True) for consistent API format
+        serializer = SimpleJobSerializer(jobs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     serializer_class = OpportunitySerializer
     permission_classes = [IsAuthenticated]
     pagination_class = OpportunityPagination
@@ -392,3 +444,326 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                 {"error": f"Failed to generate crawl statistics: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def scrape_jobs(self, request):
+        """
+        Scrape jobs from various job boards using JobSpy library.
+        Accepts parameters for customizing the scraping process.
+        Note: Currently public for development, will require proper authentication later.
+        """
+        # TODO: Implement proper permission checks
+        # if not request.user.is_staff and not request.user.groups.filter(name='Employers').exists():
+        #     return Response(
+        #         {"error": "Permission denied. Only employers and staff can scrape jobs."},
+        #         status=status.HTTP_403_FORBIDDEN
+        #     )
+
+        try:
+            from jobspy import scrape_jobs
+        except ImportError:
+            return Response(
+                {"error": "JobSpy library is not installed. Please install with: pip install python-jobspy"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Extract and validate parameters
+        site_names = request.data.get('site_names', ['indeed', 'linkedin', 'glassdoor'])
+        location = request.data.get('location', 'United States')
+        job_type = request.data.get('job_type')  # fulltime, parttime, internship, contract
+        results_wanted = request.data.get('results_wanted', 50)
+        hours_old = request.data.get('hours_old', 168)  # 1 week default
+        is_remote = request.data.get('is_remote', False)
+        country_indeed = request.data.get('country_indeed', 'USA')
+        linkedin_fetch_description = request.data.get('linkedin_fetch_description', False)
+        proxies = request.data.get('proxies', [])
+        search_term = request.data.get('search_term', '')
+        dry_run = request.data.get('dry_run', False)
+
+        # Validate site_names
+        valid_sites = ['indeed', 'linkedin', 'zip_recruiter', 'glassdoor', 'google', 'bayt', 'naukri']
+        if not isinstance(site_names, list) or not all(site in valid_sites for site in site_names):
+            return Response(
+                {"error": f"Invalid site_names. Must be a list containing: {valid_sites}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate results_wanted
+        if not isinstance(results_wanted, int) or results_wanted < 1 or results_wanted > 1000:
+            return Response(
+                {"error": "results_wanted must be an integer between 1 and 1000"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Prepare scraping parameters
+        scrape_params = {
+            'site_name': site_names,
+            'location': location,
+            'results_wanted': results_wanted,
+            'hours_old': hours_old,
+            'country_indeed': country_indeed,
+            'verbose': 1,
+            'description_format': 'markdown',
+        }
+
+        # Add optional parameters
+        if search_term:
+            scrape_params['search_term'] = search_term
+            
+        if job_type and job_type in ['fulltime', 'parttime', 'internship', 'contract']:
+            scrape_params['job_type'] = job_type
+        
+        if is_remote:
+            scrape_params['is_remote'] = True
+            
+        if linkedin_fetch_description:
+            scrape_params['linkedin_fetch_description'] = True
+            
+        if proxies and isinstance(proxies, list):
+            scrape_params['proxies'] = proxies
+
+        try:
+            # Scrape jobs
+            jobs_df = scrape_jobs(**scrape_params)
+            
+            if jobs_df.empty:
+                return Response({
+                    'success': True,
+                    'message': 'No jobs found with the given criteria',
+                    'stats': {
+                        'scraped_count': 0,
+                        'parameters': scrape_params
+                    }
+                }, status=status.HTTP_200_OK)
+
+            scraped_count = len(jobs_df)
+
+            if dry_run:
+                # Return sample data without saving
+                sample_jobs = jobs_df.head(5).to_dict('records')
+                return Response({
+                    'success': True,
+                    'message': f'DRY RUN: Found {scraped_count} jobs (showing first 5)',
+                    'sample_data': sample_jobs,
+                    'stats': {
+                        'scraped_count': scraped_count,
+                        'parameters': scrape_params
+                    }
+                }, status=status.HTTP_200_OK)
+
+            # Convert DataFrame to format compatible with BulkJobCreateSerializer
+            job_data = self._convert_jobspy_to_opportunities(jobs_df)
+            
+            # Use the existing bulk create serializer
+            batch_id = f"jobspy_{uuid.uuid4().hex[:8]}"
+            serializer_data = {
+                'jobs': job_data,
+                'batch_id': batch_id,
+                'source': 'jobspy'
+            }
+
+            serializer = BulkJobCreateSerializer(
+                data=serializer_data,
+                context={'user': getattr(request, 'user', None)}
+            )
+            
+            if serializer.is_valid():
+                with transaction.atomic():
+                    result = serializer.save()
+                    
+                # Clear recommendation cache for all users
+                cache_pattern = 'user_recommendations_*'
+                cache.delete_pattern(cache_pattern)
+                
+                response_data = {
+                    'success': True,
+                    'message': f'Successfully scraped and imported {result["created_count"]} jobs',
+                    'stats': {
+                        'scraped_count': scraped_count,
+                        'created_count': result['created_count'],
+                        'skipped_count': result['skipped_count'],
+                        'error_count': result['error_count'],
+                        'batch_id': result['batch_id'],
+                        'parameters': scrape_params
+                    }
+                }
+                
+                if result['errors']:
+                    response_data['errors'] = result['errors']
+                
+                response_data['created_opportunity_ids'] = [
+                    opp.id for opp in result['opportunities']
+                ]
+                
+                return Response(response_data, status=status.HTTP_201_CREATED)
+                
+            else:
+                return Response({
+                    'error': 'Data validation failed',
+                    'details': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response(
+                {"error": f"Job scraping failed: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def _convert_jobspy_to_opportunities(self, jobs_df):
+        """Convert JobSpy DataFrame to format compatible with opportunity model"""
+        job_data = []
+        
+        for _, job in jobs_df.iterrows():
+            # Map JobSpy job types to our opportunity types
+            job_type_mapping = {
+                'fulltime': 'job',
+                'parttime': 'job', 
+                'internship': 'internship',
+                'contract': 'job',
+            }
+            
+            # Determine experience level from title and description
+            experience_level = self._determine_experience_level(
+                job.get('TITLE', ''), 
+                job.get('DESCRIPTION', '')
+            )
+            
+            # Parse salary information
+            salary_data = self._parse_salary_info(job)
+            
+            # Determine source platform
+            source = job.get('SITE', 'other').lower()
+            if source == 'zip_recruiter':
+                source = 'other'
+            elif source not in ['linkedin', 'indeed', 'glassdoor']:
+                source = 'other'
+
+            opportunity_data = {
+                'title': str(job.get('TITLE', '')).strip(),
+                'type': job_type_mapping.get(job.get('JOB_TYPE', ''), 'job'),
+                'organization': str(job.get('COMPANY', '')).strip(),
+                'location': self._format_location(job),
+                'is_remote': bool(job.get('is_remote', False)) or 'remote' in str(job.get('location', '')).lower(),
+                'experience_level': experience_level,
+                'description': str(job.get('DESCRIPTION', '')).strip(),
+                'application_url': str(job.get('JOB_URL', '')).strip(),
+                'source': source,
+                'external_id': self._generate_external_id(job),
+                **salary_data
+            }
+            
+            # Add skills if available (Naukri specific)
+            if 'skills' in job and job['skills']:
+                skills = self._parse_skills(job['skills'])
+                if skills:
+                    opportunity_data['skills_required'] = skills
+
+            job_data.append(opportunity_data)
+            
+        return job_data
+
+    def _determine_experience_level(self, title, description):
+        """Determine experience level from job title and description"""
+        title_lower = title.lower()
+        desc_lower = description.lower() if description else ''
+        
+        # Senior level indicators
+        senior_keywords = [
+            'senior', 'sr.', 'lead', 'principal', 'architect', 'manager', 
+            'director', 'head of', 'chief', 'vp', 'vice president'
+        ]
+        
+        # Entry level indicators  
+        entry_keywords = [
+            'junior', 'jr.', 'entry', 'associate', 'trainee', 'intern',
+            'graduate', 'new grad', 'recent graduate', '0-2 years'
+        ]
+        
+        # Check for senior indicators
+        for keyword in senior_keywords:
+            if keyword in title_lower or keyword in desc_lower:
+                return 'senior'
+                
+        # Check for entry indicators
+        for keyword in entry_keywords:
+            if keyword in title_lower or keyword in desc_lower:
+                return 'entry'
+                
+        # Default to mid-level
+        return 'mid'
+
+    def _parse_salary_info(self, job):
+        """Parse salary information from JobSpy job data"""
+        salary_data = {}
+        
+        min_amount = job.get('MIN_AMOUNT')
+        max_amount = job.get('MAX_AMOUNT')
+        interval = job.get('INTERVAL', 'yearly')
+        
+        # Convert to numbers if available
+        if min_amount and str(min_amount).replace('.', '').isdigit():
+            salary_data['salary_min'] = float(min_amount)
+            
+        if max_amount and str(max_amount).replace('.', '').isdigit():
+            salary_data['salary_max'] = float(max_amount)
+            
+        # Map interval to our salary period choices
+        interval_mapping = {
+            'yearly': 'yearly',
+            'monthly': 'monthly', 
+            'weekly': 'weekly',
+            'daily': 'daily',
+            'hourly': 'hourly'
+        }
+        
+        if interval in interval_mapping:
+            salary_data['salary_period'] = interval_mapping[interval]
+        else:
+            salary_data['salary_period'] = 'yearly'
+            
+        # Default currency
+        salary_data['salary_currency'] = 'USD'
+        
+        return salary_data
+
+    def _format_location(self, job):
+        """Format location from JobSpy job data"""
+        city = job.get('CITY', '')
+        state = job.get('STATE', '')
+        country = job.get('country', '')
+        
+        # Combine location parts
+        location_parts = []
+        if city:
+            location_parts.append(str(city).strip())
+        if state:
+            location_parts.append(str(state).strip())
+        if country and country != 'USA':
+            location_parts.append(str(country).strip())
+            
+        return ', '.join(location_parts) if location_parts else 'Remote'
+
+    def _generate_external_id(self, job):
+        """Generate a unique external ID for the job"""
+        job_url = job.get('JOB_URL', '')
+        if job_url:
+            # Extract ID from URL if possible
+            url_id = re.search(r'(?:jk=|jobid=|jobs/view/)([a-zA-Z0-9]+)', job_url)
+            if url_id:
+                return f"{job.get('SITE', 'unknown')}_{url_id.group(1)}"
+        
+        # Fallback to hash of title + company
+        title = str(job.get('TITLE', '')).strip()
+        company = str(job.get('COMPANY', '')).strip()
+        return f"{job.get('SITE', 'unknown')}_{hash(title + company) % 1000000}"
+
+    def _parse_skills(self, skills_data):
+        """Parse skills from job data (mainly for Naukri)"""
+        if isinstance(skills_data, str):
+            # Split by common delimiters
+            skills = re.split(r'[,;|]', skills_data)
+            return [skill.strip() for skill in skills if skill.strip()]
+        elif isinstance(skills_data, list):
+            return [str(skill).strip() for skill in skills_data if str(skill).strip()]
+        
+        return []

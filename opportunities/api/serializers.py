@@ -1,3 +1,4 @@
+
 from rest_framework import serializers
 from opportunities.models import Category, Tag, Opportunity
 import re
@@ -5,7 +6,19 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 from django.utils.text import slugify
 
-
+class SimpleJobSerializer(serializers.Serializer):
+    company = serializers.CharField(required=True, allow_blank=False)
+    title = serializers.CharField(required=True, allow_blank=False)
+    location = serializers.CharField(required=True, allow_blank=False)
+    link = serializers.CharField(required=True, allow_blank=False)
+    # Optional fields
+    type = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    description = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    details = serializers.JSONField(required=False, allow_null=True, default=None)
+    jobID = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    company_name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+    # Add any other fields you expect from jobs_glassdoor.json as optional here
+    
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
@@ -311,4 +324,112 @@ class BulkJobCreateSerializer(serializers.Serializer):
             'batch_id': batch_id,
             'opportunities': created_opportunities
         }
+
+
+class JobScrapingRequestSerializer(serializers.Serializer):
+    """
+    Serializer for JobSpy scraping requests.
+    Validates parameters for job scraping from various platforms.
+    """
+    
+    VALID_SITES = ['indeed', 'linkedin', 'zip_recruiter', 'glassdoor', 'google', 'bayt', 'naukri']
+    JOB_TYPE_CHOICES = ['fulltime', 'parttime', 'internship', 'contract']
+    
+    site_names = serializers.ListField(
+        child=serializers.ChoiceField(choices=VALID_SITES),
+        default=['indeed', 'linkedin', 'glassdoor'],
+        help_text="List of job sites to scrape from"
+    )
+    
+    location = serializers.CharField(
+        max_length=255,
+        default='United States',
+        help_text="Location to search for jobs"
+    )
+    
+    search_term = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        help_text="Optional search term to filter jobs (leave empty to get all job types)"
+    )
+    
+    job_type = serializers.ChoiceField(
+        choices=JOB_TYPE_CHOICES,
+        required=False,
+        help_text="Type of employment to filter by"
+    )
+    
+    results_wanted = serializers.IntegerField(
+        default=50,
+        min_value=1,
+        max_value=1000,
+        help_text="Number of job results to retrieve per site (1-1000)"
+    )
+    
+    hours_old = serializers.IntegerField(
+        default=168,  # 1 week
+        min_value=1,
+        max_value=8760,  # 1 year
+        help_text="Filter jobs posted within this many hours (1-8760)"
+    )
+    
+    is_remote = serializers.BooleanField(
+        default=False,
+        help_text="Filter for remote jobs only"
+    )
+    
+    country_indeed = serializers.CharField(
+        max_length=50,
+        default='USA',
+        help_text="Country code for Indeed/Glassdoor searches"
+    )
+    
+    linkedin_fetch_description = serializers.BooleanField(
+        default=False,
+        help_text="Fetch full descriptions for LinkedIn jobs (slower but more detailed)"
+    )
+    
+    proxies = serializers.ListField(
+        child=serializers.CharField(max_length=255),
+        required=False,
+        allow_empty=True,
+        help_text="List of proxy URLs in format 'user:pass@host:port'"
+    )
+    
+    dry_run = serializers.BooleanField(
+        default=False,
+        help_text="Return scraped data without saving to database"
+    )
+    
+    def validate_site_names(self, value):
+        """Ensure at least one valid site is provided"""
+        if not value:
+            raise serializers.ValidationError("At least one site must be specified")
+        return value
+    
+    def validate_proxies(self, value):
+        """Validate proxy format"""
+        if not value:
+            return value
+            
+        for proxy in value:
+            # Basic validation for proxy format
+            if not re.match(r'^(?:[\w\-\.]+:[\w\-\.]+@)?[\w\-\.]+:\d+$', proxy):
+                raise serializers.ValidationError(
+                    f"Invalid proxy format: {proxy}. Expected format: 'user:pass@host:port' or 'host:port'"
+                )
+        return value
+
+
+class JobScrapingResponseSerializer(serializers.Serializer):
+    """
+    Serializer for JobSpy scraping response data.
+    """
+    success = serializers.BooleanField()
+    message = serializers.CharField()
+    stats = serializers.DictField()
+    sample_data = serializers.ListField(required=False)
+    errors = serializers.ListField(required=False)
+    created_opportunity_ids = serializers.ListField(required=False)
 

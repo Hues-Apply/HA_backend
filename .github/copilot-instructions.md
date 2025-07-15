@@ -158,3 +158,6 @@ except Exception as e:
 - Ensure that all API endpoints are well-documented and follow RESTful principles.
 - Don't write code that I didn't explicitly ask for, even if it is necessary to complete the task at hand.
 - Do not write md files or documentation unless explicitly requested.
+- Do not create management commands unless explicitly requested.
+- Do not create new Django apps unless explicitly requested.
+
