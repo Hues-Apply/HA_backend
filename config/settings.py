@@ -76,7 +76,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'opportunities',
     'django.contrib.sites',
-    'users'
+    'users',
+    'scholarships',
     
 ]
 
@@ -186,7 +187,9 @@ LOGIN_REDIRECT_URL= 'account'
 
 
 # DO NOT CHANGE THIS
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgres://nezer_admin:MynameisNezer95.@localhost:5432/ha_db')
+# DATABASE_URL = os.getenv('DATABASE_URL', 'postgres://nezer_admin:MynameisNezer95.@localhost:5432/ha_db')
+
+DATABASE_URL = os.getenv('DATABASE_URL')
 url = urlparse(DATABASE_URL)
 DATABASES = {
     'default': {

@@ -28,4 +28,5 @@ urlpatterns = [
     
     # API URLs
     path('api/opportunities/', include('opportunities.api.urls')),
+    path('api/scholarships/', include('scholarships.urls')),
 ]
