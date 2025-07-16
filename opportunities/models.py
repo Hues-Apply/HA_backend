@@ -5,8 +5,6 @@ from django.db.models import JSONField
 from django.utils.text import slugify
 from django.core.cache import cache
 from django.conf import settings
-from django.utils import timezone
-
 
 class Category(models.Model):
     name = models.CharField(max_length=100)
@@ -129,15 +127,3 @@ class Opportunity(models.Model):
             models.Index(fields=['location']),
         ]
 
-class OpportunityApplication(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE)
-    applied_at = models.DateTimeField(default=timezone.now)
-
-    class Meta:
-        unique_together = ('user', 'opportunity')
-        verbose_name = "Applied Opportunity"
-        verbose_name_plural = "Applied Opportunities"
-
-    def __str__(self):
-        return f"{self.user.email} applied for {self.opportunity.title}"
