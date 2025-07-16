@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.utils.text import slugify
+from opportunities.models import OpportunityApplication
 
 class SimpleJobSerializer(serializers.Serializer):
     company = serializers.CharField(required=True, allow_blank=False)
@@ -440,4 +441,10 @@ class JobScrapingResponseSerializer(serializers.Serializer):
     sample_data = serializers.ListField(required=False)
     errors = serializers.ListField(required=False)
     created_opportunity_ids = serializers.ListField(required=False)
+
+
+class OpportunityApplicationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OpportunityApplication
+        fields = ['id', 'user', 'opportunity', 'applied_at']
 

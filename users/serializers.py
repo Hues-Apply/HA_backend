@@ -7,7 +7,7 @@ from .models import (
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ['name', 'email', 'profile_picture', 'phone_number', 'country', 'goal']
+        fields = ['name', 'email', 'profile_picture', 'phone_number', 'country', 'goal', 'cv_file', 'cv_filename', 'cv_mime']
 
 
 class CareerProfileSerializer(serializers.ModelSerializer):
@@ -22,10 +22,10 @@ class EducationProfileSerializer(serializers.ModelSerializer):
             'id', 'degree', 'school', 'start_date', 'end_date',
             'is_currently_studying', 'extra_curricular', 'created_at', 'user'
         ]
-        read_only_fields = ['id', 'created_at', 'user']  
+        read_only_fields = ['id', 'created_at', 'user']
 
     def create(self, validated_data):
-        validated_data['user'] = self.context['request'].user  
+        validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
 
@@ -68,13 +68,13 @@ class RecommendationPrioritySerializer(serializers.ModelSerializer):
 class CustomUserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     profile = UserProfileSerializer(read_only=True)
-    
+
     class Meta:
         model = CustomUser
-        fields = ['id', 'email', 'first_name', 'last_name', 'country', 
+        fields = ['id', 'email', 'first_name', 'last_name', 'country',
                   'is_email_verified', 'date_joined', 'role', 'profile']
         read_only_fields = ['date_joined', 'is_email_verified']
-    
+
     def get_role(self, obj):
         return obj.get_role()
 
@@ -82,21 +82,21 @@ class CustomUserSerializer(serializers.ModelSerializer):
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     role = serializers.ChoiceField(choices=['applicant', 'employer'], write_only=True)
-    
+
     class Meta:
         model = CustomUser
         fields = ['email', 'password', 'first_name', 'last_name', 'country', 'role']
-    
+
     def create(self, validated_data):
         role = validated_data.pop('role')
         user = CustomUser.objects.create_user(**validated_data)
-        
+
         # Set role
         if role == 'applicant':
             user.set_as_applicant()
         elif role == 'employer':
             user.set_as_employer()
-            
+
         return user
 
 
@@ -105,11 +105,11 @@ class DocumentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Document
         fields = [
-            'id', 'document_type', 'file', 'original_filename', 
+            'id', 'document_type', 'file', 'original_filename',
             'processing_status', 'uploaded_at', 'processed_at', 'error_message'
         ]
         read_only_fields = ['id', 'uploaded_at', 'processed_at', 'processing_status', 'error_message', 'original_filename']
-    
+
     def to_internal_value(self, data):
         # Handle different field names for file upload
         # If 'document' is provided instead of 'file', map it
@@ -117,7 +117,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             data = data.copy()  # Make a mutable copy
             data['file'] = data['document']
         return super().to_internal_value(data)
-    
+
     def create(self, validated_data):
         # Extract original filename from uploaded file
         file = validated_data['file']
@@ -128,7 +128,7 @@ class DocumentSerializer(serializers.ModelSerializer):
 class UserGoalSerializer(serializers.ModelSerializer):
     """Serializer for User Goals"""
     goal_display = serializers.CharField(source='get_goal_display', read_only=True)
-    
+
     class Meta:
         model = UserGoal
         fields = ['id', 'goal', 'goal_display', 'priority', 'created_at']
@@ -141,17 +141,17 @@ class ParsedProfileSerializer(serializers.ModelSerializer):
     missing_sections = serializers.ReadOnlyField()
     completed_sections = serializers.ReadOnlyField()
     document_info = DocumentSerializer(source='document', read_only=True)
-    
+
     class Meta:
         model = ParsedProfile
         fields = [
-            'user', 'document_info', 'first_name', 'last_name', 'email', 'phone', 
-            'address', 'linkedin', 'portfolio', 'summary', 'education', 'experience', 
+            'user', 'document_info', 'first_name', 'last_name', 'email', 'phone',
+            'address', 'linkedin', 'portfolio', 'summary', 'education', 'experience',
             'skills', 'certifications', 'languages', 'projects', 'confidence_score',
             'completion_percentage', 'missing_sections', 'completed_sections',
             'parsed_at', 'updated_at'
         ]
-        read_only_fields = ['user', 'parsed_at', 'updated_at', 'completion_percentage', 
+        read_only_fields = ['user', 'parsed_at', 'updated_at', 'completion_percentage',
                            'missing_sections', 'completed_sections']
 
 
@@ -168,13 +168,13 @@ class UserGoalUpdateSerializer(serializers.Serializer):
         child=serializers.CharField(),
         allow_empty=False
     )
-    
+
     def validate_goals(self, value):
         """Validate and convert goals (accepts both keys and display values)"""
         # Create mapping from display values to keys
         display_to_key = {display: key for key, display in UserGoal.GOAL_CHOICES}
         key_to_display = {key: display for key, display in UserGoal.GOAL_CHOICES}
-        
+
         validated_goals = []
         for goal in value:
             # If it's already a valid key, use it
@@ -189,73 +189,73 @@ class UserGoalUpdateSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     f"'{goal}' is not a valid choice. Valid choices are: {valid_choices}"
                 )
-        
+
         # Ensure goals are unique
         if len(validated_goals) != len(set(validated_goals)):
             raise serializers.ValidationError("Goals must be unique")
-        
+
         return validated_goals
 
 class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
     """Comprehensive serializer that returns all user profile data in one response"""
-    
+
     # Personal Info from UserProfile
     profile_picture = serializers.SerializerMethodField()
     phone_number = serializers.SerializerMethodField()
     goal = serializers.SerializerMethodField()
-    
+
     # Career Profile
     career_profile = serializers.SerializerMethodField()
-    
+
     # Multiple Education entries
     education_profiles = EducationProfileSerializer(many=True, read_only=True)
-    
+
     # Multiple Experience entries
     experience_profiles = ExperienceProfileSerializer(many=True, read_only=True)
-    
+
     # Multiple Project entries
     project_profiles = ProjectsProfileSerializer(many=True, read_only=True)
-    
+
     # Opportunities Interest
     opportunities_interest = serializers.SerializerMethodField()
-    
+
     # Recommendation Priority
     recommendation_priority = serializers.SerializerMethodField()
-    
+
     # Parsed Profile Data (from CV)
     parsed_profile_data = serializers.SerializerMethodField()
-    
+
     # Goals
     user_goals = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = CustomUser
         fields = [
             # Basic user info
             'id', 'email', 'first_name', 'last_name', 'country', 'date_joined',
-            
+
             # Personal info
             'profile_picture', 'phone_number', 'goal',
-            
+
             # Career
             'career_profile',
-            
+
             # Multiple entries
             'education_profiles',
-            'experience_profiles', 
+            'experience_profiles',
             'project_profiles',
-            
+
             # Preferences
             'opportunities_interest',
             'recommendation_priority',
-            
+
             # Parsed profile
             'parsed_profile_data',
-            
+
             # Goals
             'user_goals'
         ]
-    
+
     def get_profile_picture(self, obj):
         try:
             if hasattr(obj, 'profile') and obj.profile.profile_picture:
@@ -263,7 +263,7 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
         except:
             pass
         return None
-    
+
     def get_phone_number(self, obj):
         try:
             if hasattr(obj, 'profile'):
@@ -271,7 +271,7 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
         except:
             pass
         return ""
-    
+
     def get_goal(self, obj):
         try:
             if hasattr(obj, 'profile'):
@@ -279,7 +279,7 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
         except:
             pass
         return ""
-    
+
     def get_career_profile(self, obj):
         try:
             career = obj.careerprofile
@@ -291,10 +291,10 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
         except:
             return {
                 'industry': '',
-                'job_title': '', 
+                'job_title': '',
                 'profile_summary': ''
             }
-    
+
     def get_opportunities_interest(self, obj):
         try:
             interest = obj.opportunitiesinterest
@@ -311,7 +311,7 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
                 'grants': False,
                 'internships': False
             }
-    
+
     def get_recommendation_priority(self, obj):
         try:
             priority = obj.recommendationpriority
@@ -330,7 +330,7 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
                 'others': False,
                 'additional_preferences': ''
             }
-    
+
     def get_parsed_profile_data(self, obj):
         try:
             if hasattr(obj, 'parsed_profile'):
@@ -358,7 +358,7 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
         except:
             pass
         return None
-    
+
     def get_user_goals(self, obj):
         try:
             goals = obj.goals.all().order_by('priority')

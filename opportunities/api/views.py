@@ -23,6 +23,9 @@ from .serializers import (
 )
 from opportunities.matching import OpportunityMatcher
 from opportunities.models import Opportunity
+from rest_framework.generics import ListAPIView
+from opportunities.models import OpportunityApplication
+from opportunities.api.serializers import OpportunityApplicationSerializer
 
 
 class OpportunityPagination(PageNumberPagination):
@@ -125,7 +128,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                 pass
 
         return queryset
-    
+
     def retrieve(self, request, *args, **kwargs):
         """
         When user views detail page of an opportunity, track it as applied
@@ -758,7 +761,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         return ', '.join(location_parts) if location_parts else 'Remote'
 
     def _generate_external_id(self, job):
-        """Generate a unique external ID for the job""" 
+        """Generate a unique external ID for the job"""
         job_url = job.get('JOB_URL', '')
         if job_url:
             # Extract ID from URL if possible
@@ -781,3 +784,16 @@ class OpportunityViewSet(viewsets.ModelViewSet):
             return [str(skill).strip() for skill in skills_data if str(skill).strip()]
 
         return []
+
+
+class UserOpportunityApplicationsView(ListAPIView):
+    serializer_class = OpportunityApplicationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return OpportunityApplication.objects.filter(user=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({'applications': serializer.data})
