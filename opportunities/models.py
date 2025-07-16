@@ -66,7 +66,7 @@ class Opportunity(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='opportunities')
     location = models.CharField(max_length=100, db_index=True)
     is_remote = models.BooleanField(default=False)
-    experience_level = models.CharField( 
+    experience_level = models.CharField(
         max_length=20,
         choices=EXPERIENCE_CHOICES,
         default='entry',
@@ -86,7 +86,7 @@ class Opportunity(models.Model):
     application_count = models.PositiveIntegerField(default=0)
     application_url = models.URLField(blank=True)
     application_process = models.TextField(blank=True)
-    
+
     # Salary fields
     salary_min = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     salary_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -98,7 +98,7 @@ class Opportunity(models.Model):
         ('monthly', 'Per Month'),
         ('yearly', 'Per Year'),
     ], default='yearly', blank=True)
-    
+
     # Additional fields for bulk import
     external_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     source = models.CharField(max_length=50, default='manual', choices=[
