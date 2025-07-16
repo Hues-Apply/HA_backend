@@ -5,8 +5,6 @@ from django.db.models import JSONField
 from django.utils.text import slugify
 from django.core.cache import cache
 from django.conf import settings
-from django.utils import timezone
-
 
 class Category(models.Model):
     name = models.CharField(max_length=100)

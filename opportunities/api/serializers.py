@@ -1,6 +1,6 @@
 
 from rest_framework import serializers
-from opportunities.models import Category, Tag, Opportunity, OpportunityApplication
+from opportunities.models import Category, Tag, Opportunity
 import re
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -43,8 +43,6 @@ class OpportunitySerializer(serializers.ModelSerializer):
         source='tags', queryset=Tag.objects.all(), many=True, write_only=True, required=False
     )
 
-    is_applied = serializers.SerializerMethodField()
-
     class Meta:
         model = Opportunity
         fields = [
@@ -53,16 +51,8 @@ class OpportunitySerializer(serializers.ModelSerializer):
             'description', 'eligibility_criteria', 'skills_required',
             'tags', 'tag_ids', 'deadline', 'created_at',
             'is_verified', 'is_featured', 'application_url',
-            'application_process', 'posted_by','is_applied'
+            'application_process', 'posted_by'
         ]
-    def get_is_applied(self, obj):
-        request = self.context.get('request')
-        if request and request.user and request.user.is_authenticated:
-            return OpportunityApplication.objects.filter(
-                opportunity=obj,
-                user=request.user
-            ).exists()
-        return False    
 
 
 class OpportunityRecommendationSerializer(serializers.Serializer):
