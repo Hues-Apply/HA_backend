@@ -16,8 +16,8 @@ import re
 from datetime import timedelta, datetime
 from django.db import transaction
 from .serializers import (
-    OpportunitySerializer, 
-    OpportunityRecommendationSerializer, 
+    OpportunitySerializer,
+    OpportunityRecommendationSerializer,
     BulkJobCreateSerializer,
     JobScrapingRequestSerializer
 )
@@ -86,7 +86,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = [
         'type', 'location', 'is_remote', 'category__slug', 'tags__slug',
-        'deadline', 'experience_level'  
+        'deadline', 'experience_level'
     ]
     search_fields = ['title', 'description', 'organization']
     ordering_fields = ['deadline', 'created_at', 'title', 'view_count']
@@ -125,7 +125,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                 pass
 
         return queryset
-    
+
     def retrieve(self, request, *args, **kwargs):
         """
         When user views detail page of an opportunity, track it as applied
@@ -150,7 +150,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         # TODO: Implement proper authentication check
         if not hasattr(request.user, 'profile') or not request.user.is_authenticated:
             return Response(
-                {"error": "User profile required for recommendations"}, 
+                {"error": "User profile required for recommendations"},
                 status=status.HTTP_401_UNAUTHORIZED
             )
         user_profile = request.user.profile
@@ -176,7 +176,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         if deadline_before:
             filters_dict['deadline_before'] = deadline_before
 
-        posted_within = request.query_params.get('posted_within')  
+        posted_within = request.query_params.get('posted_within')
         if posted_within:
             filters_dict['posted_within'] = posted_within
 
@@ -250,20 +250,20 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         #         {"error": "Permission denied. Only employers and staff can bulk create opportunities."},
         #         status=status.HTTP_403_FORBIDDEN
         #     )
-        
+
         serializer = BulkJobCreateSerializer(
             data=request.data,
             context={'user': getattr(request, 'user', None)}
         )
-        
+
         if serializer.is_valid():
             try:
                 result = serializer.save()
-                
+
                 # Clear recommendation cache for all users
                 cache_pattern = 'user_recommendations_*'
                 cache.delete_pattern(cache_pattern)
-                
+
                 response_data = {
                     'success': True,
                     'message': f"Bulk creation completed successfully",
@@ -274,24 +274,24 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                         'batch_id': result['batch_id']
                     }
                 }
-                
+
                 # Include errors if any
                 if result['errors']:
                     response_data['errors'] = result['errors']
-                
+
                 # Include created opportunity IDs for tracking
                 response_data['created_opportunity_ids'] = [
                     opp.id for opp in result['opportunities']
                 ]
-                
+
                 return Response(response_data, status=status.HTTP_201_CREATED)
-                
+
             except Exception as e:
                 return Response(
                     {"error": f"Bulk creation failed: {str(e)}"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
@@ -307,35 +307,35 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         #         {"error": "Permission denied. Only staff can view crawl statistics."},
         #         status=status.HTTP_403_FORBIDDEN
         #     )
-        
+
         try:
             # Get date ranges for statistics
             now = timezone.now()
             today = now.date()
             week_ago = today - timedelta(days=7)
             month_ago = today - timedelta(days=30)
-            
+
             # Basic counts
             total_opportunities = Opportunity.objects.count()
             verified_count = Opportunity.objects.filter(is_verified=True).count()
             unverified_count = total_opportunities - verified_count
-            
+
             # Source breakdown
             source_stats = Opportunity.objects.values('source').annotate(
                 count=Count('id')
             ).order_by('-count')
-            
+
             # Recent activity (last 30 days)
             recent_opportunities = Opportunity.objects.filter(
                 created_at__date__gte=month_ago
             )
-            
+
             recent_by_day = recent_opportunities.extra(
                 select={'day': 'date(created_at)'
             }).values('day').annotate(
                 count=Count('id')
             ).order_by('day')
-            
+
             # Batch statistics
             batch_stats = Opportunity.objects.filter(
                 import_batch_id__isnull=False,
@@ -344,50 +344,50 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                 count=Count('id'),
                 verified_count=Count('id', filter=Q(is_verified=True))
             ).order_by('-count')[:10]
-            
+
             # Type distribution
             type_stats = Opportunity.objects.values('type').annotate(
                 count=Count('id')
             ).order_by('-count')
-            
+
             # Location insights (top 10)
             location_stats = Opportunity.objects.exclude(
                 location__iexact='remote'
             ).values('location').annotate(
                 count=Count('id')
             ).order_by('-count')[:10]
-            
+
             # Remote vs on-site breakdown
             remote_count = Opportunity.objects.filter(is_remote=True).count()
             onsite_count = total_opportunities - remote_count
-            
+
             # Category breakdown
             category_stats = Opportunity.objects.values(
                 'category__name'
             ).annotate(
                 count=Count('id')
             ).order_by('-count')[:10]
-            
+
             # Salary insights
             opportunities_with_salary = Opportunity.objects.filter(
                 salary_min__isnull=False
             ).count()
-            
+
             salary_by_currency = Opportunity.objects.filter(
                 salary_min__isnull=False
             ).values('salary_currency').annotate(
                 count=Count('id')
             ).order_by('-count')
-            
+
             # Performance metrics
             avg_view_count = Opportunity.objects.aggregate(
                 avg_views=Avg('view_count')
             )['avg_views'] or 0
-            
+
             avg_application_count = Opportunity.objects.aggregate(
                 avg_applications=Avg('application_count')
             )['avg_applications'] or 0
-            
+
             stats = {
                 'overview': {
                     'total_opportunities': total_opportunities,
@@ -450,9 +450,9 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                 },
                 'generated_at': now.isoformat()
             }
-            
+
             return Response(stats, status=status.HTTP_200_OK)
-            
+
         except Exception as e:
             return Response(
                 {"error": f"Failed to generate crawl statistics: {str(e)}"},
@@ -523,23 +523,23 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         # Add optional parameters
         if search_term:
             scrape_params['search_term'] = search_term
-            
+
         if job_type and job_type in ['fulltime', 'parttime', 'internship', 'contract']:
             scrape_params['job_type'] = job_type
-        
+
         if is_remote:
             scrape_params['is_remote'] = True
-            
+
         if linkedin_fetch_description:
             scrape_params['linkedin_fetch_description'] = True
-            
+
         if proxies and isinstance(proxies, list):
             scrape_params['proxies'] = proxies
 
         try:
             # Scrape jobs
             jobs_df = scrape_jobs(**scrape_params)
-            
+
             if jobs_df.empty:
                 return Response({
                     'success': True,
@@ -567,7 +567,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
 
             # Convert DataFrame to format compatible with BulkJobCreateSerializer
             job_data = self._convert_jobspy_to_opportunities(jobs_df)
-            
+
             # Use the existing bulk create serializer
             batch_id = f"jobspy_{uuid.uuid4().hex[:8]}"
             serializer_data = {
@@ -580,15 +580,15 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                 data=serializer_data,
                 context={'user': getattr(request, 'user', None)}
             )
-            
+
             if serializer.is_valid():
                 with transaction.atomic():
                     result = serializer.save()
-                    
+
                 # Clear recommendation cache for all users
                 cache_pattern = 'user_recommendations_*'
                 cache.delete_pattern(cache_pattern)
-                
+
                 response_data = {
                     'success': True,
                     'message': f'Successfully scraped and imported {result["created_count"]} jobs',
@@ -601,16 +601,16 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                         'parameters': scrape_params
                     }
                 }
-                
+
                 if result['errors']:
                     response_data['errors'] = result['errors']
-                
+
                 response_data['created_opportunity_ids'] = [
                     opp.id for opp in result['opportunities']
                 ]
-                
+
                 return Response(response_data, status=status.HTTP_201_CREATED)
-                
+
             else:
                 return Response({
                     'error': 'Data validation failed',
@@ -626,25 +626,25 @@ class OpportunityViewSet(viewsets.ModelViewSet):
     def _convert_jobspy_to_opportunities(self, jobs_df):
         """Convert JobSpy DataFrame to format compatible with opportunity model"""
         job_data = []
-        
+
         for _, job in jobs_df.iterrows():
             # Map JobSpy job types to our opportunity types
             job_type_mapping = {
                 'fulltime': 'job',
-                'parttime': 'job', 
+                'parttime': 'job',
                 'internship': 'internship',
                 'contract': 'job',
             }
-            
+
             # Determine experience level from title and description
             experience_level = self._determine_experience_level(
-                job.get('TITLE', ''), 
+                job.get('TITLE', ''),
                 job.get('DESCRIPTION', '')
             )
-            
+
             # Parse salary information
             salary_data = self._parse_salary_info(job)
-            
+
             # Determine source platform
             source = job.get('SITE', 'other').lower()
             if source == 'zip_recruiter':
@@ -665,7 +665,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                 'external_id': self._generate_external_id(job),
                 **salary_data
             }
-            
+
             # Add skills if available (Naukri specific)
             if 'skills' in job and job['skills']:
                 skills = self._parse_skills(job['skills'])
@@ -673,71 +673,71 @@ class OpportunityViewSet(viewsets.ModelViewSet):
                     opportunity_data['skills_required'] = skills
 
             job_data.append(opportunity_data)
-            
+
         return job_data
 
     def _determine_experience_level(self, title, description):
         """Determine experience level from job title and description"""
         title_lower = title.lower()
         desc_lower = description.lower() if description else ''
-        
+
         # Senior level indicators
         senior_keywords = [
-            'senior', 'sr.', 'lead', 'principal', 'architect', 'manager', 
+            'senior', 'sr.', 'lead', 'principal', 'architect', 'manager',
             'director', 'head of', 'chief', 'vp', 'vice president'
         ]
-        
-        # Entry level indicators  
+
+        # Entry level indicators
         entry_keywords = [
             'junior', 'jr.', 'entry', 'associate', 'trainee', 'intern',
             'graduate', 'new grad', 'recent graduate', '0-2 years'
         ]
-        
+
         # Check for senior indicators
         for keyword in senior_keywords:
             if keyword in title_lower or keyword in desc_lower:
                 return 'senior'
-                
+
         # Check for entry indicators
         for keyword in entry_keywords:
             if keyword in title_lower or keyword in desc_lower:
                 return 'entry'
-                
+
         # Default to mid-level
         return 'mid'
 
     def _parse_salary_info(self, job):
         """Parse salary information from JobSpy job data"""
         salary_data = {}
-        
+
         min_amount = job.get('MIN_AMOUNT')
         max_amount = job.get('MAX_AMOUNT')
         interval = job.get('INTERVAL', 'yearly')
-        
+
         # Convert to numbers if available
         if min_amount and str(min_amount).replace('.', '').isdigit():
             salary_data['salary_min'] = float(min_amount)
-            
+
         if max_amount and str(max_amount).replace('.', '').isdigit():
             salary_data['salary_max'] = float(max_amount)
-            
+
         # Map interval to our salary period choices
         interval_mapping = {
             'yearly': 'yearly',
-            'monthly': 'monthly', 
+            'monthly': 'monthly',
             'weekly': 'weekly',
             'daily': 'daily',
             'hourly': 'hourly'
         }
-        
+
         if interval in interval_mapping:
             salary_data['salary_period'] = interval_mapping[interval]
         else:
             salary_data['salary_period'] = 'yearly'
-            
+
         # Default currency
         salary_data['salary_currency'] = 'USD'
-        
+
         return salary_data
 
     def _format_location(self, job):
@@ -745,7 +745,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         city = job.get('CITY', '')
         state = job.get('STATE', '')
         country = job.get('country', '')
-        
+
         # Combine location parts
         location_parts = []
         if city:
@@ -754,18 +754,18 @@ class OpportunityViewSet(viewsets.ModelViewSet):
             location_parts.append(str(state).strip())
         if country and country != 'USA':
             location_parts.append(str(country).strip())
-            
+
         return ', '.join(location_parts) if location_parts else 'Remote'
 
     def _generate_external_id(self, job):
-        """Generate a unique external ID for the job"""
+        """Generate a unique external ID for the job""" 
         job_url = job.get('JOB_URL', '')
         if job_url:
             # Extract ID from URL if possible
             url_id = re.search(r'(?:jk=|jobid=|jobs/view/)([a-zA-Z0-9]+)', job_url)
             if url_id:
                 return f"{job.get('SITE', 'unknown')}_{url_id.group(1)}"
-        
+
         # Fallback to hash of title + company
         title = str(job.get('TITLE', '')).strip()
         company = str(job.get('COMPANY', '')).strip()
@@ -779,5 +779,5 @@ class OpportunityViewSet(viewsets.ModelViewSet):
             return [skill.strip() for skill in skills if skill.strip()]
         elif isinstance(skills_data, list):
             return [str(skill).strip() for skill in skills_data if str(skill).strip()]
-        
+
         return []

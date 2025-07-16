@@ -18,12 +18,12 @@ class SimpleJobSerializer(serializers.Serializer):
     jobID = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     company_name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
     # Add any other fields you expect from jobs_glassdoor.json as optional here
-    
+
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ['id', 'name', 'slug', 'description']
- 
+
 
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
@@ -62,7 +62,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
                 opportunity=obj,
                 user=request.user
             ).exists()
-        return False    
+        return False
 
 
 class OpportunityRecommendationSerializer(serializers.Serializer):
@@ -109,7 +109,7 @@ class BulkJobCreateSerializer(serializers.Serializer):
     batch_id = serializers.CharField(max_length=100, required=False)
     auto_verify = serializers.BooleanField(default=False)
     skip_duplicates = serializers.BooleanField(default=True)
-    
+
     def validate_jobs(self, value):
         """Validate that we have at least one job"""
         if not value:
@@ -117,7 +117,7 @@ class BulkJobCreateSerializer(serializers.Serializer):
         if len(value) > 1000:
             raise serializers.ValidationError("Maximum 1000 jobs allowed per batch")
         return value
-    
+
     def extract_skills_from_description(self, description):
         """Extract skills from job description using keyword matching"""
         # Common tech skills to look for
@@ -127,45 +127,45 @@ class BulkJobCreateSerializer(serializers.Serializer):
             'machine learning', 'data science', 'ai', 'leadership', 'communication',
             'project management', 'agile', 'scrum', 'teamwork'
         ]
-        
+
         found_skills = []
         description_lower = description.lower()
-        
+
         for skill in skills_keywords:
             if skill in description_lower:
                 found_skills.append(skill.title())
-                
+
         return list(set(found_skills))  # Remove duplicates
-    
+
     def parse_salary(self, salary_text):
         """Parse salary text and extract min, max, currency, and period"""
         if not salary_text:
             return None, None, None, None
-            
+
         # Simple regex patterns for salary parsing
         import re
-        
+
         # Look for currency symbols and amounts
         currency_patterns = {
             '$': 'USD',
-            '€': 'EUR', 
+            '€': 'EUR',
             '£': 'GBP',
             '₦': 'NGN'
         }
-        
+
         currency = None
         for symbol, curr in currency_patterns.items():
             if symbol in salary_text:
                 currency = curr
                 break
-        
+
         if not currency:
             currency = 'USD'  # Default
-            
+
         # Extract numbers (simple approach)
         numbers = re.findall(r'[\d,]+', salary_text.replace(',', ''))
         amounts = [int(num) for num in numbers if num.isdigit()]
-        
+
         if len(amounts) >= 2:
             salary_min = min(amounts)
             salary_max = max(amounts)
@@ -175,26 +175,26 @@ class BulkJobCreateSerializer(serializers.Serializer):
         else:
             salary_min = None
             salary_max = None
-            
+
         # Determine period
         period = 'year'  # Default
         if any(word in salary_text.lower() for word in ['hour', 'hourly']):
             period = 'hour'
         elif any(word in salary_text.lower() for word in ['month', 'monthly']):
             period = 'month'
-            
+
         return salary_min, salary_max, currency, period
-    
+
     def detect_remote_work(self, location, description):
         """Detect if this is a remote work opportunity"""
         remote_keywords = ['remote', 'work from home', 'distributed', 'anywhere']
-        
+
         location_lower = location.lower()
         description_lower = description.lower()
-        
-        return any(keyword in location_lower or keyword in description_lower 
+
+        return any(keyword in location_lower or keyword in description_lower
                   for keyword in remote_keywords)
-    
+
     def get_or_create_category(self, category_name):
         """Get or create category by name"""
         try:
@@ -202,7 +202,7 @@ class BulkJobCreateSerializer(serializers.Serializer):
         except Category.DoesNotExist:
             slug = slugify(category_name)
             return Category.objects.create(name=category_name, slug=slug)
-    
+
     def get_or_create_tags(self, skills):
         """Get or create tags for skills"""
         tags = []
@@ -214,17 +214,17 @@ class BulkJobCreateSerializer(serializers.Serializer):
             )
             tags.append(tag)
         return tags
-    
+
     def check_duplicate(self, title, organization, external_id=None):
         """Check if opportunity already exists"""
         queryset = Opportunity.objects.filter(
             title__iexact=title,
             organization__iexact=organization
         )
-        
+
         if external_id:
             queryset = queryset.filter(external_id=external_id)
-        
+
         return queryset.exists()
 
     def transform_job_data(self, job_data, batch_id=None, user=None):
@@ -235,20 +235,20 @@ class BulkJobCreateSerializer(serializers.Serializer):
             job_data.get('salary_text', '')
         )
         is_remote = self.detect_remote_work(
-            job_data['location'], 
+            job_data['location'],
             job_data['description']
         )
-        
+
         # Get or create category
         category = self.get_or_create_category(
             job_data.get('category_name', 'Technology')
         )
-        
+
         # Set deadline (default to 30 days from now if not provided)
         deadline = job_data.get('deadline')
         if not deadline:
             deadline = timezone.now().date() + timedelta(days=30)
-        
+
         # Prepare the opportunity data
         opportunity_data = {
             'title': job_data['title'],
@@ -272,60 +272,60 @@ class BulkJobCreateSerializer(serializers.Serializer):
             'is_verified': False,  # Will be set based on auto_verify flag
             'experience_level': job_data.get('experience_level', ''),
         }
-        
+
         return opportunity_data, skills
 
     def create(self, validated_data):
         """Create opportunities in bulk with transaction safety"""
         from django.db import transaction
-        
+
         jobs_data = validated_data['jobs']
         batch_id = validated_data.get('batch_id', f"batch_{timezone.now().strftime('%Y%m%d_%H%M%S')}")
         auto_verify = validated_data.get('auto_verify', False)
         skip_duplicates = validated_data.get('skip_duplicates', True)
         user = self.context.get('user')
-        
+
         created_opportunities = []
         skipped_count = 0
         errors = []
-        
+
         with transaction.atomic():
             for i, job_data in enumerate(jobs_data):
                 try:
                     # Check for duplicates
                     if skip_duplicates and self.check_duplicate(
-                        job_data['title'], 
+                        job_data['title'],
                         job_data['organization'],
                         job_data.get('external_id')
                     ):
                         skipped_count += 1
                         continue
-                    
+
                     # Transform job data
                     opportunity_data, skills = self.transform_job_data(
                         job_data, batch_id, user
                     )
-                    
+
                     # Set verification status
                     opportunity_data['is_verified'] = auto_verify
-                    
+
                     # Create opportunity
                     opportunity = Opportunity.objects.create(**opportunity_data)
-                    
+
                     # Add tags (skills)
                     if skills:
                         tags = self.get_or_create_tags(skills)
                         opportunity.tags.set(tags)
-                    
+
                     created_opportunities.append(opportunity)
-                    
+
                 except Exception as e:
                     errors.append({
                         'index': i,
                         'title': job_data.get('title', 'Unknown'),
                         'error': str(e)
                     })
-        
+
         return {
             'created_count': len(created_opportunities),
             'skipped_count': skipped_count,
@@ -341,88 +341,88 @@ class JobScrapingRequestSerializer(serializers.Serializer):
     Serializer for JobSpy scraping requests.
     Validates parameters for job scraping from various platforms.
     """
-    
+
     VALID_SITES = ['indeed', 'linkedin', 'zip_recruiter', 'glassdoor', 'google', 'bayt', 'naukri']
     JOB_TYPE_CHOICES = ['fulltime', 'parttime', 'internship', 'contract']
-    
+
     site_names = serializers.ListField(
         child=serializers.ChoiceField(choices=VALID_SITES),
         default=['indeed', 'linkedin', 'glassdoor'],
         help_text="List of job sites to scrape from"
     )
-    
+
     location = serializers.CharField(
         max_length=255,
         default='United States',
         help_text="Location to search for jobs"
     )
-    
+
     search_term = serializers.CharField(
         max_length=255,
         required=False,
         allow_blank=True,
         help_text="Optional search term to filter jobs (leave empty to get all job types)"
     )
-    
+
     job_type = serializers.ChoiceField(
         choices=JOB_TYPE_CHOICES,
         required=False,
         help_text="Type of employment to filter by"
     )
-    
+
     results_wanted = serializers.IntegerField(
         default=50,
         min_value=1,
         max_value=1000,
         help_text="Number of job results to retrieve per site (1-1000)"
     )
-    
+
     hours_old = serializers.IntegerField(
         default=168,  # 1 week
         min_value=1,
         max_value=8760,  # 1 year
         help_text="Filter jobs posted within this many hours (1-8760)"
     )
-    
+
     is_remote = serializers.BooleanField(
         default=False,
         help_text="Filter for remote jobs only"
     )
-    
+
     country_indeed = serializers.CharField(
         max_length=50,
         default='USA',
         help_text="Country code for Indeed/Glassdoor searches"
     )
-    
+
     linkedin_fetch_description = serializers.BooleanField(
         default=False,
         help_text="Fetch full descriptions for LinkedIn jobs (slower but more detailed)"
     )
-    
+
     proxies = serializers.ListField(
         child=serializers.CharField(max_length=255),
         required=False,
         allow_empty=True,
         help_text="List of proxy URLs in format 'user:pass@host:port'"
     )
-    
+
     dry_run = serializers.BooleanField(
         default=False,
         help_text="Return scraped data without saving to database"
     )
-    
+
     def validate_site_names(self, value):
         """Ensure at least one valid site is provided"""
         if not value:
             raise serializers.ValidationError("At least one site must be specified")
         return value
-    
+
     def validate_proxies(self, value):
         """Validate proxy format"""
         if not value:
             return value
-            
+
         for proxy in value:
             # Basic validation for proxy format
             if not re.match(r'^(?:[\w\-\.]+:[\w\-\.]+@)?[\w\-\.]+:\d+$', proxy):
