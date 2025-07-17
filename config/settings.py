@@ -78,7 +78,7 @@ INSTALLED_APPS = [
     'django.contrib.sites',
     'users',
     'scholarships',
-    
+
 ]
 
 
@@ -134,6 +134,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://dev.huesapply.com",
     "https://backend.huesapply.com",
     "https://huesapply.com",
+    "https://www.huesapply.com",
     # Add your frontend production URL when deploying
 ]
 
