@@ -139,8 +139,6 @@ CORS_ALLOWED_ORIGINS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "https://huesapply.com",
-    "https://dev.huesapply.com",
-    "https://backend.huesapply.com",
 ]
 
 
