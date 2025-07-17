@@ -133,6 +133,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://ha-backend-pq2f.vercel.app",
     "https://dev.huesapply.com",
     "https://backend.huesapply.com",
+    "https://huesapply.com",
     # Add your frontend production URL when deploying
 ]
 
