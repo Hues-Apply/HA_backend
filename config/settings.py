@@ -137,6 +137,13 @@ CORS_ALLOWED_ORIGINS = [
     # Add your frontend production URL when deploying
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://huesapply.com",
+    "https://dev.huesapply.com",
+    "https://backend.huesapply.com",
+]
+
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
