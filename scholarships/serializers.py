@@ -17,6 +17,16 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             'scraped_at',
             'overview',
         ]
+    
+    def validate(self, data):
+        errors = {}
+        for field in ['title', 'application_link', 'deadline']:
+            value = data.get(field)
+            if value is None or str(value).strip() == '':
+                errors[field] = ['This field is required and cannot be empty.']
+        if errors:
+            raise serializers.ValidationError(errors)
+        return data
 
 class UserScholarshipSerializer(serializers.ModelSerializer):
     scholarship = ScholarshipSerializer(read_only=True)
@@ -38,3 +48,4 @@ class UserScholarshipSerializer(serializers.ModelSerializer):
         scholarship_id = validated_data.pop('scholarship_id')
         validated_data['scholarship_id'] = scholarship_id
         return super().create(validated_data)
+    
