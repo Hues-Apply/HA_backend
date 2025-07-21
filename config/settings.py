@@ -74,10 +74,12 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
+    'django_filters',
     'opportunities',
     'django.contrib.sites',
     'users',
     'scholarships',
+    'jobs',
 
 ]
 
