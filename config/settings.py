@@ -28,7 +28,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-&xr2$*30wm0ovs57&be0r$()np*q3k!*l=!-(x)mi##!c31hdk'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# get from .env file
+DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ha-backend-pq2f.vercel.app', '.vercel.app', '.huesapply.com']
 
