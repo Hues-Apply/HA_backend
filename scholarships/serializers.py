@@ -14,6 +14,8 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             'course',
             'gpa',
             'location',
+            'degree_level', 
+            'nationality',
             'scraped_at',
             'overview',
         ]

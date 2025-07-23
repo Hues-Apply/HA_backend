@@ -11,8 +11,11 @@ class Scholarship(models.Model):
     course = models.TextField()
     gpa = models.TextField()
     location = models.TextField()
+    degree_level = models.CharField(max_length=100, blank=True, null=True)
+    nationality = models.CharField(max_length=100, blank=True, null=True)
     scraped_at = models.DateTimeField()
     overview = models.TextField(blank=True, null=True)
+    
 
     def __str__(self):
         return self.title
@@ -31,3 +34,14 @@ class UserScholarship(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.scholarship.title}"
+    
+class ScholarshipProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    gpa = models.FloatField()
+    location = models.CharField(max_length=100)
+    course = models.CharField(max_length=100)
+    degree_level = models.CharField(max_length=100)
+    nationality = models.CharField(max_length=100)
+    financial_need = models.FloatField()
+    eligibility_tags = models.JSONField(default=list, blank=True)  
+
