@@ -91,15 +91,17 @@ class ScholarshipViewSet(viewsets.ModelViewSet):
             for us in user_scholarships
         ]
         return Response({'applications': data})
-
-#Recommended scholarships for a user
+    
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def recommended_scholarships(request):
     try:
         profile = ScholarshipProfile.objects.get(user=request.user)
     except ScholarshipProfile.DoesNotExist:
-        return Response({"error": "User profile not found."}, status=404)
+        return Response({
+            "error": "You need to complete your scholarship profile before viewing recommendations.",
+            "requires_profile": True
+        }, status=200)
 
     results = []
     for scholarship in Scholarship.objects.all():
