@@ -2,11 +2,16 @@ from rest_framework import viewsets, filters, status
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import AllowAny
-from .models import Scholarship, UserScholarship
+from .models import Scholarship, UserScholarship,ScholarshipProfile
 from .serializers import ScholarshipSerializer
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
+from scholarships.matching.scholarship_matching import score_scholarship
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+
+
 
 class ScholarshipPagination(PageNumberPagination):
     page_size = 10
@@ -86,3 +91,27 @@ class ScholarshipViewSet(viewsets.ModelViewSet):
             for us in user_scholarships
         ]
         return Response({'applications': data})
+
+#Recommended scholarships for a user
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def recommended_scholarships(request):
+    try:
+        profile = ScholarshipProfile.objects.get(user=request.user)
+    except ScholarshipProfile.DoesNotExist:
+        return Response({"error": "User profile not found."}, status=404)
+
+    results = []
+    for scholarship in Scholarship.objects.all():
+        score = score_scholarship(profile, scholarship)
+        results.append((score, scholarship))
+
+    results.sort(key=lambda x: x[0], reverse=True)
+
+    serialized_data = []
+    for score, scholarship in results:
+        serialized = ScholarshipSerializer(scholarship).data
+        serialized['match_score'] = score
+        serialized_data.append(serialized)
+
+    return Response(serialized_data)
