@@ -117,3 +117,4 @@ def recommended_scholarships(request):
         serialized_data.append(serialized)
 
     return Response(serialized_data)
+

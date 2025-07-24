@@ -8,10 +8,11 @@ from django.db import transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 
-from .models import Document, ParsedProfile, ProjectsProfile, UserGoal, CustomUser
+from .models import Document, ParsedProfile, ProjectsProfile, UserGoal, CustomUser, ScholarshipProfile
 from .serializers import (
     DocumentSerializer, EducationProfileSerializer, ParsedProfileSerializer,
-    ProfileCompletionSerializer, ProjectsProfileSerializer, UserGoalUpdateSerializer, UserGoalSerializer
+    ProfileCompletionSerializer, ProjectsProfileSerializer, UserGoalUpdateSerializer, UserGoalSerializer,
+    ScholarshipProfileSerializer,
 )
 
 
@@ -615,3 +616,36 @@ def manage_personal_profile(request):
         return Response({
             'error': f'Failed to manage personal profile: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'POST', 'PUT'])
+@permission_classes([IsAuthenticated])
+def manage_scholarship_profile(request):
+    """Create, retrieve, or update Scholarship Profile"""
+    try:
+        profile = ScholarshipProfile.objects.get(user=request.user)
+    except ScholarshipProfile.DoesNotExist:
+        profile = None
+
+    if request.method == 'GET':
+        if not profile:
+            return Response({"detail": "No scholarship profile found"}, status=404)
+        return Response(ScholarshipProfileSerializer(profile).data)
+
+    elif request.method == 'POST':
+        if profile:
+            return Response({"detail": "Profile already exists. Use PUT to update."}, status=400)
+        serializer = ScholarshipProfileSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+
+    elif request.method == 'PUT':
+        if not profile:
+            return Response({"detail": "No profile found. Use POST to create."}, status=404)
+        serializer = ScholarshipProfileSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)

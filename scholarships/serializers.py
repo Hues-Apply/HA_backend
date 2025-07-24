@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Scholarship, UserScholarship
+from .models import Scholarship, UserScholarship, ScholarshipProfile 
 
 class ScholarshipSerializer(serializers.ModelSerializer):
     class Meta:
@@ -50,4 +50,5 @@ class UserScholarshipSerializer(serializers.ModelSerializer):
         scholarship_id = validated_data.pop('scholarship_id')
         validated_data['scholarship_id'] = scholarship_id
         return super().create(validated_data)
+    
     

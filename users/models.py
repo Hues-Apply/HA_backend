@@ -407,3 +407,33 @@ class ParsedProfile(models.Model):
 
         return completed
 
+class ScholarshipProfile(models.Model):
+    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='scholarship_profile')
+    gpa = models.DecimalField(max_digits=4, decimal_places=2, blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    course = models.CharField(max_length=255, blank=True)  
+    degree_level = models.CharField(max_length=100, blank=True)
+    nationality = models.CharField(max_length=100, blank=True)
+    financial_need = models.CharField(max_length=100, blank=True)
+    deadline_proximity = models.IntegerField(blank=True, null=True)
+    eligibility_tags = models.JSONField(default=list, blank=True)
+    
+    class Meta:
+        ordering = ['user__email']
+        verbose_name = "Scholarship Profile"
+        verbose_name_plural = "Scholarship Profiles"
+
+    def __str__(self):
+        return f"{self.user.email} - Scholarship Profile"
+
+    def clean(self):
+        """Basic validations"""
+        if self.gpa:
+            try:
+                gpa_val = float(self.gpa)
+                if not (0 <= gpa_val <= 10):  
+                    raise ValidationError("GPA must be between 0 and 10.")
+            except ValueError:
+                raise ValidationError("GPA must be a valid number.")
+        if self.deadline_proximity is not None and self.deadline_proximity < 0:
+            raise ValidationError("Deadline proximity cannot be negative.")

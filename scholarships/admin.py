@@ -16,3 +16,4 @@ class UserScholarshipAdmin(admin.ModelAdmin):
     search_fields = ('user__email', 'scholarship__title')
     readonly_fields = ('applied_date', 'updated_at')
     ordering = ('-applied_date',)
+

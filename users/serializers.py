@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import (
     CustomUser, UserProfile, CareerProfile, EducationProfile, ExperienceProfile,
-    Document, ParsedProfile, UserGoal, ProjectsProfile, OpportunitiesInterest, RecommendationPriority
+    Document, ParsedProfile, UserGoal, ProjectsProfile, OpportunitiesInterest, RecommendationPriority,
+    ScholarshipProfile
 )
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -372,3 +373,17 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
             ]
         except:
             return []
+        
+class ScholarshipProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ScholarshipProfile
+        fields = [
+            'id', 'gpa', 'location', 'course', 'degree_level',
+            'nationality', 'financial_need', 'deadline_proximity',
+            'eligibility_tags'
+        ]
+        read_only_fields = ['id']
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
