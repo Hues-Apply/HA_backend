@@ -41,4 +41,5 @@ urlpatterns = [
     path('api/profile/career/', profile_views.manage_career_profile, name='manage-career-profile'),
     path('api/profile/opportunities-interest/', profile_views.manage_opportunities_interest, name='manage-opportunities-interest'),
     path('api/profile/recommendation-priority/', profile_views.manage_recommendation_priority, name='manage-recommendation-priority'),
+    path('api/profile/scholarship/', profile_views.manage_scholarship_profile, name='manage-scholarship-profile'),
 ]

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import (
     CustomUser, UserProfile, CareerProfile, EducationProfile, ExperienceProfile,
-    Document, ParsedProfile, UserGoal
+    Document, ParsedProfile, UserGoal, ScholarshipProfile
 )
 
 class CustomUserAdmin(UserAdmin):
@@ -86,6 +86,17 @@ class UserGoalAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('user')
+    
+    
+class ScholarshipProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'gpa', 'location', 'course', 'degree_level', 'financial_need')
+    search_fields = ('user__email', 'course', 'location', 'degree_level')
+    list_filter = ('degree_level', 'financial_need', 'location')
+    ordering = ('user__email',)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user')
+
 
 
 # Register models
@@ -97,3 +108,4 @@ admin.site.register(ExperienceProfile, ExperienceProfileAdmin)
 admin.site.register(Document, DocumentAdmin)
 admin.site.register(ParsedProfile, ParsedProfileAdmin)
 admin.site.register(UserGoal, UserGoalAdmin)
+admin.site.register(ScholarshipProfile, ScholarshipProfileAdmin)
