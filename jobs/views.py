@@ -7,22 +7,29 @@ from .serializers import JobSerializer
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
+from users.permissions import JobPermissionMixin
 
 class JobPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
     max_page_size = 100
 
-class JobViewSet(viewsets.ModelViewSet):
+class JobViewSet(JobPermissionMixin, viewsets.ModelViewSet):
     queryset = Job.objects.all()
     serializer_class = JobSerializer
-    permission_classes = [AllowAny]
     pagination_class = JobPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['location', 'job_type', 'experience_level', 'skills']
     search_fields = ['title', 'company', 'location', 'skills', 'experience_level']
     ordering_fields = ['posted_at', 'title']
     ordering = ['-posted_at']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        exclude_id = self.request.query_params.get('exclude')
+        if exclude_id:
+            queryset = queryset.exclude(id=exclude_id)
+        return queryset
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -46,7 +53,7 @@ class JobViewSet(viewsets.ModelViewSet):
         self.perform_destroy(instance)
         return Response({"message": "Job deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['post'], url_path='apply', permission_classes=[AllowAny])
+    @action(detail=True, methods=['post'], url_path='apply')
     def apply(self, request, pk=None):
         if not request.user or not request.user.is_authenticated:
             return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)

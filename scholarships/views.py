@@ -10,18 +10,18 @@ from django.shortcuts import get_object_or_404
 from scholarships.matching.scholarship_matching import score_scholarship
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from users.permissions import ScholarshipPermissionMixin
 
 
 
 class ScholarshipPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
-    max_page_size = 100
 
-class ScholarshipViewSet(viewsets.ModelViewSet):
+
+class ScholarshipViewSet(ScholarshipPermissionMixin, viewsets.ModelViewSet):
     queryset = Scholarship.objects.all()
     serializer_class = ScholarshipSerializer
-    permission_classes = [AllowAny]
     pagination_class = ScholarshipPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = [
@@ -37,13 +37,13 @@ class ScholarshipViewSet(viewsets.ModelViewSet):
         if exclude_id:
             queryset = queryset.exclude(id=exclude_id)
         return queryset
-    
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
+
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
@@ -61,7 +61,7 @@ class ScholarshipViewSet(viewsets.ModelViewSet):
         return Response({"message": "Scholarship deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
 
 
-    @action(detail=True, methods=['post'], url_path='apply', permission_classes=[AllowAny])
+    @action(detail=True, methods=['post'], url_path='apply')
     def apply(self, request, pk=None):
         if not request.user or not request.user.is_authenticated:
             return Response({'detail': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -91,7 +91,7 @@ class ScholarshipViewSet(viewsets.ModelViewSet):
             for us in user_scholarships
         ]
         return Response({'applications': data})
-    
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def recommended_scholarships(request):

@@ -2,6 +2,7 @@ from rest_framework import viewsets, filters, status
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from users.permissions import OpportunityPermissions, UserApplicationPermissions
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.db.models import F, Count, Q, Avg, Sum
 from django.core.cache import cache
@@ -35,6 +36,7 @@ class OpportunityPagination(PageNumberPagination):
 
 
 class OpportunityViewSet(viewsets.ModelViewSet):
+    permission_classes = [OpportunityPermissions]
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
     def from_jobs_json(self, request):
         """
@@ -84,7 +86,6 @@ class OpportunityViewSet(viewsets.ModelViewSet):
         serializer = SimpleJobSerializer(jobs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     serializer_class = OpportunitySerializer
-    permission_classes = [IsAuthenticated]
     pagination_class = OpportunityPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = [
@@ -788,7 +789,7 @@ class OpportunityViewSet(viewsets.ModelViewSet):
 
 class UserOpportunityApplicationsView(ListAPIView):
     serializer_class = OpportunityApplicationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [UserApplicationPermissions]
 
     def get_queryset(self):
         return OpportunityApplication.objects.filter(user=self.request.user)

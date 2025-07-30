@@ -1,5 +1,6 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from .permissions import ProfilePermissions, DocumentPermissions
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -81,7 +82,7 @@ def delete_user(request, user_id):
 
 class DocumentUploadView(APIView):
     """Upload CV/Resume documents - File upload only"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [DocumentPermissions]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
@@ -173,7 +174,7 @@ def update_parsed_profile(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def profile_completion_status(request):
     """Get profile completion status"""
     try:
@@ -202,7 +203,7 @@ def profile_completion_status(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def update_user_goals(request):
     """Update user goals"""
     try:
@@ -236,7 +237,7 @@ def update_user_goals(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def get_user_goals(request):
     """Get user's current goals"""
     try:
@@ -251,7 +252,7 @@ def get_user_goals(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def get_parsed_profile(request):
     """Get current user's parsed profile data"""
     try:
@@ -274,7 +275,7 @@ def get_parsed_profile(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def get_comprehensive_user_profile(request):
     """Get comprehensive user profile data in a single request"""
     try:
@@ -295,7 +296,7 @@ def get_comprehensive_user_profile(request):
 # Profile Management Endpoints for Individual Sections
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def create_education_profile(request):
     """Create a new education entry"""
     try:
@@ -316,7 +317,7 @@ def create_education_profile(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def create_experience_profile(request):
     """Create a new experience entry"""
     from .serializers import ExperienceProfileSerializer
@@ -360,7 +361,7 @@ def create_experience_profile(request):
 #             'error': f'Failed to create project profile: {str(e)}'
 #         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def create_project_profile(request):
     """Create a new project entry"""
     try:
@@ -386,7 +387,7 @@ def create_project_profile(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['PUT', 'DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def project_detail_view(request, pk):
     try:
         project = ProjectsProfile.objects.get(pk=pk, user=request.user)
@@ -405,7 +406,7 @@ def project_detail_view(request, pk):
         return Response({'success': True, 'message': 'Project deleted'})
 
 @api_view(['POST', 'GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def manage_career_profile(request):
     """Create or get career profile"""
     try:
@@ -453,7 +454,7 @@ def manage_career_profile(request):
 
 
 @api_view(['POST', 'GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def manage_opportunities_interest(request):
     """Create or update opportunities interest"""
     try:
@@ -501,7 +502,7 @@ def manage_opportunities_interest(request):
 
 
 @api_view(['POST', 'GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def manage_recommendation_priority(request):
     """Create or update recommendation priority"""
     try:
@@ -549,7 +550,7 @@ def manage_recommendation_priority(request):
 
 
 @api_view(['POST', 'GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([ProfilePermissions])
 def manage_personal_profile(request):
     """Create or update personal profile information"""
     try:
