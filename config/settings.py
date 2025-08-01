@@ -67,7 +67,7 @@ AUTH_USER_MODEL = 'users.CustomUser'
 # Google OAuth Settings
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET')
-GOOGLE_OAUTH_REDIRECT_URI = os.environ.get('GOOGLE_OAUTH_REDIRECT_URI', 'http://127.0.0.1:8000/api/auth/google/callback')
+GOOGLE_OAUTH_REDIRECT_URI = os.environ.get('GOOGLE_OAUTH_REDIRECT_URI', 'https://ha-backend-pq2f.vercel.app/api/auth/google/callback/')
 
 # For compatibility with existing code, also set these as GOOGLE_CLIENT_ID/SECRET
 GOOGLE_CLIENT_ID = GOOGLE_OAUTH_CLIENT_ID
