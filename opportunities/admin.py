@@ -8,7 +8,7 @@ class OpportunityAdmin(admin.ModelAdmin):
     search_fields = ('title', 'organization', 'location', 'external_id', 'import_batch_id')
     filter_horizontal = ('tags',)
     readonly_fields = ('created_at', 'updated_at', 'search_vector', 'view_count', 'application_count')
-    
+
     fieldsets = (
         ('Basic Information', {
             'fields': ('title', 'type', 'organization', 'category', 'location', 'is_remote')
@@ -24,18 +24,18 @@ class OpportunityAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('Import & Tracking', {
-            'fields': ('external_id', 'source', 'import_batch_id', 'posted_by'),
+            'fields': ('external_id', 'source', 'import_batch_id'),
             'classes': ('collapse',)
         }),
         ('Status & Visibility', {
-            'fields': ('is_verified', 'is_featured')
+            'fields': ('is_verified', 'is_featured', 'is_active')
         }),
         ('Metrics', {
             'fields': ('view_count', 'application_count', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         })
     )
-    
+
     def salary_display(self, obj):
         """Display formatted salary information"""
         if obj.salary_min and obj.salary_max:
@@ -47,9 +47,9 @@ class OpportunityAdmin(admin.ModelAdmin):
             return f"{obj.salary_currency} {obj.salary_min:,.0f}+ per {obj.salary_period}"
         return "Not specified"
     salary_display.short_description = "Salary"
-    
+
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('category', 'posted_by')
+        return super().get_queryset(request).select_related('category')
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):

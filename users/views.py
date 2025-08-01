@@ -1,41 +1,37 @@
 import logging
-import logging
 import os
 import json
-import secrets
 from urllib.parse import urlencode
-from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import ProfilePermissions
-from rest_framework.authtoken.models import Token
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.shortcuts import redirect
-from django.http import HttpResponseBadRequest
+from django.db import transaction
+from django.core.exceptions import ValidationError
 
 from .models import CustomUser, UserProfile
 from .serializers import UserRegistrationSerializer, CustomUserSerializer
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 # Import our simple Google OAuth functions
 try:
-    print("🔍 Attempting to import Google OAuth functions...")
+    logger.info("Attempting to import Google OAuth functions...")
     from .google_oauth import exchange_code_for_tokens, get_user_info_from_id_token, refresh_access_token
     GOOGLE_OAUTH_AVAILABLE = True
-    print("✅ Google OAuth functions imported successfully")
+    logger.info("Google OAuth functions imported successfully")
 except ImportError as e:
-    print(f"❌ Google OAuth import failed: {e}")
-    logging.warning(f"Google OAuth modules not available: {e}. OAuth functionality will be disabled.")
+    logger.warning(f"Google OAuth modules not available: {e}. OAuth functionality will be disabled.")
     GOOGLE_OAUTH_AVAILABLE = False
 except Exception as e:
-    print(f"❌ Unexpected error importing Google OAuth: {e}")
-    logging.warning(f"Unexpected error importing Google OAuth: {e}. OAuth functionality will be disabled.")
+    logger.error(f"Unexpected error importing Google OAuth: {e}")
     GOOGLE_OAUTH_AVAILABLE = False
-
 
 User = get_user_model()
 
@@ -77,143 +73,100 @@ class GoogleAuthCallbackView(APIView):
     Exchanges Google OAuth code for tokens and user info
     """
     permission_classes = [AllowAny]
+
     def post(self, request):
         code = request.data.get('code')
-        print(f"Received code: {code}")
+        logger.debug(f"Received OAuth code: {code[:10]}...")
 
         if not code:
-            print("❌ No code provided in request")
+            logger.warning("No authorization code provided in request")
             return Response(
                 {"error": "Authorization code is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            print(f"🔍 GOOGLE_OAUTH_AVAILABLE: {GOOGLE_OAUTH_AVAILABLE}")
+            logger.debug(f"GOOGLE_OAUTH_AVAILABLE: {GOOGLE_OAUTH_AVAILABLE}")
 
             # Check if Google OAuth is available
             if not GOOGLE_OAUTH_AVAILABLE:
-                print("❌ Google OAuth not available")
+                logger.error("Google OAuth not available")
                 return Response(
-                    {"error": "Google OAuth not available"},
+                    {"error": "Google OAuth service unavailable"},
                     status=status.HTTP_503_SERVICE_UNAVAILABLE
                 )
 
-            print("✅ Starting token exchange process...")
-            # Exchange code for tokens (similar to Express example)
+            # Exchange code for tokens
             tokens = exchange_code_for_tokens(code)
-            print(f"✅ Token exchange successful. Tokens keys: {list(tokens.keys())}")
-            print(f"✅ Token exchange successful. Tokens keys: {list(tokens.keys())}")
-
-            print("🔍 Starting ID token verification...")
-            # Extract user info from ID token
-            user_data = get_user_info_from_id_token(tokens['id_token'])
-            print(f"✅ ID token verification successful. User: {user_data.get('email', 'unknown')}")
-
-            # Verify email is verified
-            if not user_data.get('email_verified', False):
-                print(f"❌ Email not verified by Google for user: {user_data.get('email', 'unknown')}")
+            if not tokens:
+                logger.error("Failed to exchange code for tokens")
                 return Response(
-                    {"error": "Email not verified by Google"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {"error": "Failed to authenticate with Google"},
+                    status=status.HTTP_401_UNAUTHORIZED
                 )
 
-            print("✅ Email verification passed")
-            print(f"🔍 Looking for existing user with email: {user_data['email']}")
+            # Get user info from ID token
+            user_data = get_user_info_from_id_token(tokens['id_token'])
+            if not user_data:
+                logger.error("Failed to get user info from ID token")
+                return Response(
+                    {"error": "Failed to get user information"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
 
-            # Find or create user
-            user, created = User.objects.get_or_create(
-                email=user_data['email'],
-                defaults={
-                    'first_name': user_data['first_name'],
-                    'last_name': user_data['last_name'],
-                    'is_active': True,
-                    'is_email_verified': True,
-                }
-            )
+            # Create or get user
+            with transaction.atomic():
+                user, created = User.objects.get_or_create(
+                    email=user_data['email'],
+                    defaults={
+                        'first_name': user_data.get('given_name', ''),
+                        'last_name': user_data.get('family_name', ''),
+                        'is_active': True
+                    }
+                )
 
-            print(f"✅ User {'created' if created else 'found'}: {user.email}")
-            print(f"✅ User {'created' if created else 'found'}: {user.email}")
+                if created:
+                    logger.info(f"Created new user: {user.email}")
+                else:
+                    logger.info(f"Existing user logged in: {user.email}")
 
-            # Update user data if existing user
-            if not created:
-                print("🔍 Updating existing user data...")
-                user.first_name = user_data['first_name']
-                user.last_name = user_data['last_name']
-                user.is_email_verified = True
-                user.save()
-                print("✅ User data updated")
-            else:
-                print("🔍 Setting up new user as applicant...")
-                user.set_as_applicant()
-                print("✅ New user set as applicant")
+                # Create or get user profile
+                profile, _ = UserProfile.objects.get_or_create(user=user)
 
-            print("🔍 Creating/updating user profile...")
-            # Store Google data in profile
-            profile, _ = UserProfile.objects.get_or_create(
-                user=user,
-                defaults={
-                    'name': user_data.get('name', f"{user_data['first_name']} {user_data['last_name']}").strip(),
-                    'email': user_data['email'],
-                }
-            )
-            profile.google_id = user_data['google_id']
-            profile.profile_picture = user_data.get('picture', '')
-
-            # Store Google tokens for API access
-            profile.google_access_token = tokens.get('access_token')
-            if 'refresh_token' in tokens:
-                profile.google_refresh_token = tokens['refresh_token']
-            profile.save()
-            print("✅ User profile updated with Google data")
-
-            print("🔍 Generating JWT tokens...")
-            # Generate JWT tokens for your app
+            # Generate JWT tokens
             try:
                 refresh = RefreshToken.for_user(user)
-                print("✅ JWT tokens generated successfully")
-                app_access_token = str(refresh.access_token)
-                app_refresh_token = str(refresh)
+                access_token = str(refresh.access_token)
+                refresh_token = str(refresh)
+
+                logger.info(f"Generated JWT tokens for user: {user.email}")
+
+                return Response({
+                    'access_token': access_token,
+                    'refresh_token': refresh_token,
+                    'user': {
+                        'id': user.id,
+                        'email': user.email,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name,
+                        'role': user.get_role(),
+                        'is_applicant': user.is_applicant(),
+                        'is_employer': user.is_employer(),
+                        'is_admin': user.is_superuser
+                    }
+                })
+
             except Exception as jwt_error:
-                print(f"⚠️ JWT generation failed due to cryptography issues: {jwt_error}")
-                print("🔄 Using fallback token system...")
-                # Fallback: Use simple token system without cryptography
-                import uuid
-                token_id = str(uuid.uuid4())
-                app_access_token = f"simple_token_{user.id}_{token_id[:8]}"
-                app_refresh_token = f"simple_refresh_{user.id}_{token_id[8:16]}"
-                print("✅ Fallback tokens generated")
+                logger.error(f"JWT generation failed: {jwt_error}")
+                return Response(
+                    {"error": "Authentication token generation failed"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
-            print("🔍 Preparing response data...")
-            # Prepare response
-            user_serialized = CustomUserSerializer(user).data
-            user_serialized['is_new_user'] = created
-            user_serialized['google_data'] = {
-                'name': user_data.get('name'),
-                'picture': user_data.get('picture')            }
-
-            print("✅ OAuth flow completed successfully!")
-            return Response({
-                'access_token': app_access_token,
-                'refresh_token': app_refresh_token,
-                'user': user_serialized,
-                'google_tokens': {
-                    'access_token': tokens.get('access_token'),
-                    'refresh_token': tokens.get('refresh_token'),
-                    'id_token': tokens.get('id_token'),
-                    'expires_in': tokens.get('expires_in')
-                }
-            }, status=status.HTTP_200_OK)
         except Exception as e:
-            print(f"❌ ERROR in GoogleAuthCallbackView: {str(e)}")
-            print(f"❌ Error type: {type(e).__name__}")
-            print(f"❌ Error occurred at step: OAuth processing")
-            import traceback
-            print(f"❌ Full traceback:\n{traceback.format_exc()}")
-
-            logging.error(f"Google OAuth error: {str(e)}")
+            logger.error(f"Google OAuth error: {str(e)}", exc_info=True)
             return Response(
-                {"error": str(e)},
+                {"error": "Authentication failed"},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
@@ -244,7 +197,7 @@ def google_refresh_token(request):
         return Response(credentials, status=status.HTTP_200_OK)
 
     except Exception as e:
-        logging.error(f"Token refresh error: {str(e)}")
+        logger.error(f"Token refresh error: {str(e)}")
         return Response(
             {"error": str(e)},
             status=status.HTTP_400_BAD_REQUEST
@@ -324,10 +277,10 @@ class GoogleCredentialAuthView(APIView):
 
     def post(self, request):
         credential = request.data.get('credential')
-        print(f"🔍 Received Google credential token: {credential[:50] if credential else 'None'}...")
+        logger.debug(f"Received Google credential token: {credential[:50] if credential else 'None'}...")
 
         if not credential:
-            print("❌ No credential provided in request")
+            logger.warning("No credential provided in request")
             return Response(
                 {"error": "Google credential token is required"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -336,98 +289,79 @@ class GoogleCredentialAuthView(APIView):
         try:
             # Check if Google OAuth is available
             if not GOOGLE_OAUTH_AVAILABLE:
-                print("❌ Google OAuth not available")
+                logger.error("Google OAuth not available")
                 return Response(
                     {"error": "Google OAuth not available"},
                     status=status.HTTP_503_SERVICE_UNAVAILABLE
                 )
 
-            print("🔍 Starting ID token verification...")
             # Extract user info directly from ID token (credential)
             user_data = get_user_info_from_id_token(credential)
-            print(f"✅ ID token verification successful. User: {user_data.get('email', 'unknown')}")
+            if not user_data:
+                logger.error("Failed to get user info from ID token")
+                return Response(
+                    {"error": "Failed to get user information"},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
 
             # Verify email is verified
             if not user_data.get('email_verified', False):
-                print(f"❌ Email not verified by Google for user: {user_data.get('email', 'unknown')}")
+                logger.warning(f"Email not verified by Google for user: {user_data.get('email', 'unknown')}")
                 return Response(
                     {"error": "Email not verified by Google"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            print("✅ Email verification passed")
-            print(f"🔍 Looking for existing user with email: {user_data['email']}")
-
             # Get or create user
-            user, created = User.objects.get_or_create(
-                email=user_data['email'],
-                defaults={
-                    'first_name': user_data.get('first_name', ''),
-                    'last_name': user_data.get('last_name', ''),
-                    'is_email_verified': True,
-                }
-            )
-            print(f"✅ User {'created' if created else 'found'}: {user.email}")
+            with transaction.atomic():
+                user, created = User.objects.get_or_create(
+                    email=user_data['email'],
+                    defaults={
+                        'first_name': user_data.get('given_name', ''),
+                        'last_name': user_data.get('family_name', ''),
+                        'is_email_verified': True,
+                    }
+                )
+                if created:
+                    logger.info(f"Created new user: {user.email}")
+                else:
+                    logger.info(f"Existing user logged in: {user.email}")
 
-            # Set user as applicant by default if new user
-            if created:
-                user.set_as_applicant()
-                print("✅ New user set as applicant")
+                # Create or get user profile
+                profile, _ = UserProfile.objects.get_or_create(user=user)
 
-            print("🔍 Creating/updating user profile...")
-            # Store Google data in profile
-            profile, _ = UserProfile.objects.get_or_create(
-                user=user,
-                defaults={
-                    'name': user_data.get('name', f"{user_data['first_name']} {user_data['last_name']}").strip(),
-                    'email': user_data['email'],
-                }
-            )
-            profile.google_id = user_data['google_id']
-            profile.profile_picture = user_data.get('picture', '')
-            profile.save()
-            print("✅ User profile updated with Google data")
-
-            print("🔍 Generating JWT tokens...")
-            # Generate JWT tokens for your app
+            # Generate JWT tokens
             try:
                 refresh = RefreshToken.for_user(user)
-                print("✅ JWT tokens generated successfully")
-                app_access_token = str(refresh.access_token)
-                app_refresh_token = str(refresh)
+                access_token = str(refresh.access_token)
+                refresh_token = str(refresh)
+
+                logger.info(f"Generated JWT tokens for user: {user.email}")
+
+                return Response({
+                    'access_token': access_token,
+                    'refresh_token': refresh_token,
+                    'user': {
+                        'id': user.id,
+                        'email': user.email,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name,
+                        'role': user.get_role(),
+                        'is_applicant': user.is_applicant(),
+                        'is_employer': user.is_employer(),
+                        'is_admin': user.is_superuser
+                    }
+                })
+
             except Exception as jwt_error:
-                print(f"⚠️ JWT generation failed due to cryptography issues: {jwt_error}")
-                print("🔄 Using fallback token system...")
-                # Fallback: Use simple token system without cryptography
-                import uuid
-                token_id = str(uuid.uuid4())
-                app_access_token = f"simple_token_{user.id}_{token_id[:8]}"
-                app_refresh_token = f"simple_refresh_{user.id}_{token_id[8:16]}"
-                print("✅ Fallback tokens generated")
-
-            print("🔍 Preparing response data...")
-            # Prepare response
-            user_serialized = CustomUserSerializer(user).data
-            user_serialized['is_new_user'] = created
-            user_serialized['google_data'] = {
-                'name': user_data.get('name'),
-                'picture': user_data.get('picture')
-            }
-
-            print("✅ Google credential authentication completed successfully!")
-            return Response({
-                'access_token': app_access_token,
-                'refresh_token': app_refresh_token,
-                'user': user_serialized
-            }, status=status.HTTP_200_OK)
+                logger.error(f"JWT generation failed: {jwt_error}")
+                return Response(
+                    {"error": "Authentication token generation failed"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
         except Exception as e:
-            print(f"❌ ERROR in GoogleCredentialAuthView: {str(e)}")
-            print(f"❌ Error type: {type(e).__name__}")
-            import traceback
-            print(f"❌ Full traceback:\n{traceback.format_exc()}")
-
-            logging.error(f"Google credential authentication error: {str(e)}")
+            logger.error(f"Google credential authentication error: {str(e)}", exc_info=True)
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_401_UNAUTHORIZED

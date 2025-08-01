@@ -25,11 +25,38 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&xr2$*30wm0ovs57&be0r$()np*q3k!*l=!-(x)mi##!c31hdk'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError(
+        'DJANGO_SECRET_KEY environment variable is required. '
+        'Please set it in your environment variables.'
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# get from .env file
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
+
+# Security settings
+if not DEBUG:
+    # Production security settings
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+
+    # Additional security headers
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+else:
+    # Development settings
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'ha-backend-pq2f.vercel.app', '.vercel.app', '.huesapply.com']
 
@@ -59,9 +86,6 @@ if not GOOGLE_OAUTH_CLIENT_SECRET:
 # Frontend URL for redirecting after OAuth flow
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 
-SECURE_REFERRER_POLICY='no-referrer-when-downgrade'
-SECURE_CROSS_ORIGIN_OPENER_POLICY='same-origin-allow-popups'
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -81,7 +105,6 @@ INSTALLED_APPS = [
     'users',
     'scholarships',
     'jobs',
-
 ]
 
 
@@ -251,7 +274,7 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # Extra places for collectstatic to find static files
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
-]
+] if os.path.exists(os.path.join(BASE_DIR, 'static')) else []
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

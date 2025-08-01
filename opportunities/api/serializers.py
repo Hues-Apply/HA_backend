@@ -35,7 +35,6 @@ class TagSerializer(serializers.ModelSerializer):
 class OpportunitySerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     tags = TagSerializer(many=True, read_only=True)
-    posted_by = serializers.StringRelatedField(read_only=True)
 
     category_id = serializers.PrimaryKeyRelatedField(
         source='category', queryset=Category.objects.all(), write_only=True
@@ -52,7 +51,7 @@ class OpportunitySerializer(serializers.ModelSerializer):
             'description', 'eligibility_criteria', 'skills_required',
             'tags', 'tag_ids', 'deadline', 'created_at',
             'is_verified', 'is_featured', 'application_url',
-            'application_process', 'posted_by'
+            'application_process'
         ]
     def get_is_applied(self, obj):
         request = self.context.get('request')
@@ -267,7 +266,6 @@ class BulkJobCreateSerializer(serializers.Serializer):
             'external_id': job_data.get('external_id', ''),
             'source': job_data.get('source', 'linkedin'),
             'import_batch_id': batch_id,
-            'posted_by': user if user and user.is_authenticated else None,
             'is_verified': False,  # Will be set based on auto_verify flag
             'experience_level': job_data.get('experience_level', ''),
         }
