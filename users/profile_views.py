@@ -27,7 +27,7 @@ from .serializers import (
 
 class SecureFileUploadMixin:
     """Mixin for secure file upload handling"""
-    
+
     ALLOWED_FILE_TYPES = {
         'application/pdf': '.pdf',
         'application/msword': '.doc',
@@ -36,47 +36,47 @@ class SecureFileUploadMixin:
         'image/jpeg': '.jpg',
         'image/png': '.png'
     }
-    
+
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_FILENAME_LENGTH = 255
-    
+
     def validate_file(self, uploaded_file):
         """Validate uploaded file for security"""
         try:
             # Check file size
             if uploaded_file.size > self.MAX_FILE_SIZE:
                 raise ValidationError(f"File size exceeds maximum limit of {self.MAX_FILE_SIZE // (1024*1024)}MB")
-            
+
             # Check filename length
             if len(uploaded_file.name) > self.MAX_FILENAME_LENGTH:
                 raise ValidationError(f"Filename too long. Maximum length is {self.MAX_FILENAME_LENGTH} characters")
-            
+
             # Check file extension
             file_extension = os.path.splitext(uploaded_file.name)[1].lower()
             if file_extension not in self.ALLOWED_FILE_TYPES.values():
                 raise ValidationError(f"File type not allowed. Allowed types: {', '.join(self.ALLOWED_FILE_TYPES.values())}")
-            
+
             # Read first 2048 bytes for MIME type detection
             file_content = uploaded_file.read(2048)
             uploaded_file.seek(0)  # Reset file pointer
-            
+
             # Detect MIME type
             detected_mime = magic.from_buffer(file_content, mime=True)
-            
+
             # Validate MIME type
             if detected_mime not in self.ALLOWED_FILE_TYPES:
                 raise ValidationError(f"File type not allowed. Detected: {detected_mime}")
-            
+
             # Additional security checks
             if self._contains_suspicious_content(file_content):
                 raise ValidationError("File contains suspicious content")
-            
+
             return True
-            
+
         except Exception as e:
             logger.warning(f"File validation failed for {uploaded_file.name}: {str(e)}")
             raise ValidationError(f"File validation failed: {str(e)}")
-    
+
     def _contains_suspicious_content(self, file_content):
         """Check for suspicious content in file"""
         suspicious_patterns = [
@@ -86,7 +86,7 @@ class SecureFileUploadMixin:
             b'data:text/html',
             b'data:application/x-javascript'
         ]
-        
+
         file_content_lower = file_content.lower()
         return any(pattern in file_content_lower for pattern in suspicious_patterns)
 
@@ -169,10 +169,10 @@ class DocumentUploadView(SecureFileUploadMixin, APIView):
                 return Response({
                     'error': 'No file provided'
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
+
             uploaded_file = request.FILES['file']
             self.validate_file(uploaded_file)
-            
+
             # Create document instance with validated file
             serializer = DocumentSerializer(data=request.data)
             if serializer.is_valid():

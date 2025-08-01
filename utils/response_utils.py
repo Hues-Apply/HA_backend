@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class APIResponse:
     """Standardized API response utility class"""
-    
+
     @staticmethod
     def success(
         data: Any = None,
@@ -29,12 +29,12 @@ class APIResponse:
             "message": message,
             "data": data
         }
-        
+
         if meta:
             response_data["meta"] = meta
-            
+
         return Response(response_data, status=status_code)
-    
+
     @staticmethod
     def error(
         message: str = "An error occurred",
@@ -48,42 +48,42 @@ class APIResponse:
             "message": message,
             "error_code": error_code
         }
-        
+
         if errors:
             response_data["errors"] = errors
-            
+
         return Response(response_data, status=status_code)
-    
+
     @staticmethod
     def created(data: Any = None, message: str = "Resource created successfully") -> Response:
         """Return a standardized created response"""
         return APIResponse.success(data, message, status.HTTP_201_CREATED)
-    
+
     @staticmethod
     def no_content(message: str = "No content") -> Response:
         """Return a standardized no content response"""
         return APIResponse.success(None, message, status.HTTP_204_NO_CONTENT)
-    
+
     @staticmethod
     def not_found(message: str = "Resource not found") -> Response:
         """Return a standardized not found response"""
         return APIResponse.error(message, status.HTTP_404_NOT_FOUND, error_code="NOT_FOUND")
-    
+
     @staticmethod
     def unauthorized(message: str = "Authentication required") -> Response:
         """Return a standardized unauthorized response"""
         return APIResponse.error(message, status.HTTP_401_UNAUTHORIZED, error_code="UNAUTHORIZED")
-    
+
     @staticmethod
     def forbidden(message: str = "Access denied") -> Response:
         """Return a standardized forbidden response"""
         return APIResponse.error(message, status.HTTP_403_FORBIDDEN, error_code="FORBIDDEN")
-    
+
     @staticmethod
     def server_error(message: str = "Internal server error") -> Response:
         """Return a standardized server error response"""
         return APIResponse.error(message, status.HTTP_500_INTERNAL_SERVER_ERROR, error_code="SERVER_ERROR")
-    
+
     @staticmethod
     def validation_error(errors: List, message: str = "Validation failed") -> Response:
         """Return a standardized validation error response"""
@@ -123,17 +123,17 @@ def sanitize_input(value: str, max_length: int = 1000) -> str:
     """Sanitize user input to prevent injection attacks"""
     if not isinstance(value, str):
         return str(value)
-    
+
     # Remove HTML tags
     sanitized = strip_tags(value)
-    
+
     # Remove potentially dangerous characters
     sanitized = re.sub(r'[<>"\']', '', sanitized)
-    
+
     # Limit length
     if len(sanitized) > max_length:
         sanitized = sanitized[:max_length]
-    
+
     return sanitized.strip()
 
 
@@ -164,21 +164,21 @@ def paginate_response(
 ) -> Response:
     """Create a standardized paginated response"""
     from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-    
+
     paginator = Paginator(queryset, page_size)
-    
+
     try:
         items = paginator.page(page)
     except PageNotAnInteger:
         items = paginator.page(1)
     except EmptyPage:
         items = paginator.page(paginator.num_pages)
-    
+
     if serializer_class:
         data = serializer_class(items, many=True, context={'request': request}).data
     else:
         data = list(items)
-    
+
     meta = {
         "pagination": {
             "current_page": items.number,
@@ -189,7 +189,7 @@ def paginate_response(
             "has_previous": items.has_previous(),
         }
     }
-    
+
     return APIResponse.success(data, meta=meta)
 
 
@@ -202,10 +202,10 @@ def log_api_request(request: HttpRequest, response: Response, duration: float = 
         "user_id": getattr(request.user, 'id', None) if hasattr(request, 'user') else None,
         "ip_address": get_client_ip(request),
     }
-    
+
     if duration:
         log_data["duration"] = duration
-    
+
     if response.status_code >= 400:
         logger.warning(f"API Request: {log_data}")
     else:

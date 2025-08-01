@@ -33,7 +33,7 @@ class Migration(migrations.Migration):
             name='updated_at',
             field=models.DateTimeField(auto_now=True, null=True),
         ),
-        
+
         # Add indexes for better performance (these are safe to add)
         migrations.AddIndex(
             model_name='scholarship',
@@ -59,7 +59,7 @@ class Migration(migrations.Migration):
             model_name='scholarship',
             index=models.Index(fields=['is_active', 'deadline'], name='scholarship_active_deadline_idx'),
         ),
-        
+
         # Update ScholarshipProfile model (safe changes)
         migrations.AddField(
             model_name='scholarshipprofile',
