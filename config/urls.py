@@ -59,10 +59,9 @@ def health_check(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('users.urls')),
-    # Temporarily comment out problematic URL includes until deployment updates
-    # path('api/', include('opportunities.api.urls')),
-    # path('api/', include('scholarships.urls')),
-    # path('api/', include('jobs.urls')),
+    path('api/', include('opportunities.api.urls')),
+    path('api/', include('scholarships.urls')),
+    path('api/', include('jobs.urls')),
     path('health/', health_check, name='health_check'),
 ]
 
