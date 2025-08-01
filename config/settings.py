@@ -166,12 +166,21 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # React default port
     "http://127.0.0.1:5173",
-    "https://ha-backend-pq2f.vercel.app",
     "https://dev.huesapply.com",
-    "https://backend.huesapply.com",
     "https://huesapply.com",
     "https://www.huesapply.com",
     # Add your frontend production URL when deploying
+]
+
+# Additional CORS settings for OAuth and API access
+CORS_ALLOW_ALL_HEADERS = True
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
 ]
 
 ROOT_URLCONF = 'config.urls'
