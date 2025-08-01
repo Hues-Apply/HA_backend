@@ -82,6 +82,28 @@ media/
 static/collected/
 .env
 
+# Large data files
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!tailwind.config.js
+!vite.config.ts
+!vercel.json
+!env.example
+
+# Database dumps
+*.sql
+*.dump
+
+# Log files
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+
 
 # Fork specific
 setup_sync_task.bat

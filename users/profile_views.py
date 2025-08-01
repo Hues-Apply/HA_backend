@@ -1,3 +1,7 @@
+import logging
+import traceback
+import os
+import magic
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import ProfilePermissions, DocumentPermissions
@@ -8,12 +12,83 @@ from rest_framework.views import APIView
 from django.db import transaction
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError
+from django.conf import settings
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 from .models import Document, ParsedProfile, ProjectsProfile, UserGoal, CustomUser
 from .serializers import (
     DocumentSerializer, EducationProfileSerializer, ParsedProfileSerializer,
     ProfileCompletionSerializer, ProjectsProfileSerializer, UserGoalUpdateSerializer, UserGoalSerializer
 )
+
+
+class SecureFileUploadMixin:
+    """Mixin for secure file upload handling"""
+    
+    ALLOWED_FILE_TYPES = {
+        'application/pdf': '.pdf',
+        'application/msword': '.doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+        'text/plain': '.txt',
+        'image/jpeg': '.jpg',
+        'image/png': '.png'
+    }
+    
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    MAX_FILENAME_LENGTH = 255
+    
+    def validate_file(self, uploaded_file):
+        """Validate uploaded file for security"""
+        try:
+            # Check file size
+            if uploaded_file.size > self.MAX_FILE_SIZE:
+                raise ValidationError(f"File size exceeds maximum limit of {self.MAX_FILE_SIZE // (1024*1024)}MB")
+            
+            # Check filename length
+            if len(uploaded_file.name) > self.MAX_FILENAME_LENGTH:
+                raise ValidationError(f"Filename too long. Maximum length is {self.MAX_FILENAME_LENGTH} characters")
+            
+            # Check file extension
+            file_extension = os.path.splitext(uploaded_file.name)[1].lower()
+            if file_extension not in self.ALLOWED_FILE_TYPES.values():
+                raise ValidationError(f"File type not allowed. Allowed types: {', '.join(self.ALLOWED_FILE_TYPES.values())}")
+            
+            # Read first 2048 bytes for MIME type detection
+            file_content = uploaded_file.read(2048)
+            uploaded_file.seek(0)  # Reset file pointer
+            
+            # Detect MIME type
+            detected_mime = magic.from_buffer(file_content, mime=True)
+            
+            # Validate MIME type
+            if detected_mime not in self.ALLOWED_FILE_TYPES:
+                raise ValidationError(f"File type not allowed. Detected: {detected_mime}")
+            
+            # Additional security checks
+            if self._contains_suspicious_content(file_content):
+                raise ValidationError("File contains suspicious content")
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"File validation failed for {uploaded_file.name}: {str(e)}")
+            raise ValidationError(f"File validation failed: {str(e)}")
+    
+    def _contains_suspicious_content(self, file_content):
+        """Check for suspicious content in file"""
+        suspicious_patterns = [
+            b'<script',
+            b'javascript:',
+            b'vbscript:',
+            b'data:text/html',
+            b'data:application/x-javascript'
+        ]
+        
+        file_content_lower = file_content.lower()
+        return any(pattern in file_content_lower for pattern in suspicious_patterns)
 
 
 # Temporary endpoints for user management
@@ -56,6 +131,7 @@ def google_signups_list(request):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        logger.error(f"Failed to retrieve users: {str(e)}")
         return Response({
             'error': f'Failed to retrieve users: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -75,19 +151,29 @@ def delete_user(request, user_id):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        logger.error(f"Failed to delete user: {str(e)}")
         return Response({
             'error': f'Failed to delete user: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class DocumentUploadView(APIView):
-    """Upload CV/Resume documents - File upload only"""
+class DocumentUploadView(SecureFileUploadMixin, APIView):
+    """Upload CV/Resume documents with security validation"""
     permission_classes = [DocumentPermissions]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
         try:
-            # Create document instance
+            # Validate uploaded file
+            if 'file' not in request.FILES:
+                return Response({
+                    'error': 'No file provided'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            uploaded_file = request.FILES['file']
+            self.validate_file(uploaded_file)
+            
+            # Create document instance with validated file
             serializer = DocumentSerializer(data=request.data)
             if serializer.is_valid():
                 document = serializer.save(user=request.user)
@@ -95,6 +181,8 @@ class DocumentUploadView(APIView):
                 # Set status to uploaded (parsing will be done on frontend)
                 document.processing_status = 'uploaded'
                 document.save()
+
+                logger.info(f"Document uploaded successfully: {document.id} by user {request.user.id}")
 
                 return Response({
                     'success': True,
@@ -104,7 +192,13 @@ class DocumentUploadView(APIView):
 
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        except ValidationError as e:
+            logger.warning(f"File upload validation failed: {str(e)}")
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            logger.error(f"Document upload failed: {str(e)}")
             return Response({
                 'error': f'Document upload failed: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -374,14 +468,14 @@ def create_project_profile(request):
                 'data': serializer.data
             }, status=status.HTTP_201_CREATED)
 
-        # ✅ Print exact field-level errors to terminal
-        print("❌ Serializer errors:", serializer.errors)
+        # Log serializer errors for debugging
+        logger.error(f"Serializer errors: {serializer.errors}")
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Failed to create project profile: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return Response({
             'error': f'Failed to create project profile: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

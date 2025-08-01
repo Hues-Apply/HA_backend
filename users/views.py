@@ -1,7 +1,6 @@
 import logging
 import os
 import json
-from urllib.parse import urlencode
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -16,6 +15,7 @@ from django.core.exceptions import ValidationError
 
 from .models import CustomUser, UserProfile
 from .serializers import UserRegistrationSerializer, CustomUserSerializer
+from utils.response_utils import APIResponse, sanitize_dict, handle_exceptions
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ class UserRoleAPIView(APIView):
 
     def get(self, request):
         """Get current user role"""
-        return Response({
+        return APIResponse.success({
             'role': request.user.get_role(),
             'is_applicant': request.user.is_applicant(),
             'is_employer': request.user.is_employer(),
@@ -50,77 +50,39 @@ class UserRoleAPIView(APIView):
 
     def post(self, request):
         """Update user role"""
-        role = request.data.get('role')
+        # Sanitize input
+        sanitized_data = sanitize_dict(request.data)
+        role = sanitized_data.get('role')
 
         if role == 'applicant':
             request.user.set_as_applicant()
-            return Response({'message': 'Role updated to Applicant'})
+            return APIResponse.success(message='Role updated to Applicant')
         elif role == 'employer':
             request.user.set_as_employer()
-            return Response({'message': 'Role updated to Employer'})
+            return APIResponse.success(message='Role updated to Employer')
         else:
-            return Response(
-                {'error': 'Invalid role specified'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return APIResponse.error('Invalid role specified', status.HTTP_400_BAD_REQUEST)
 
 
-# Google Sign-in views
+class GoogleAuthMixin:
+    """Mixin to handle Google OAuth authentication logic"""
 
-class GoogleAuthCallbackView(APIView):
-    """
-    Simple Google OAuth callback - equivalent to app.post('/auth/google', ...)
-    Exchanges Google OAuth code for tokens and user info
-    """
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        code = request.data.get('code')
-        logger.debug(f"Received OAuth code: {code[:10]}...")
-
-        if not code:
-            logger.warning("No authorization code provided in request")
-            return Response(
-                {"error": "Authorization code is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+    def _authenticate_google_user(self, user_data, require_email_verification=True):
+        """Shared method to authenticate or create Google user"""
         try:
-            logger.debug(f"GOOGLE_OAUTH_AVAILABLE: {GOOGLE_OAUTH_AVAILABLE}")
+            # Verify email is verified if required
+            if require_email_verification and not user_data.get('email_verified', False):
+                logger.warning(f"Email not verified by Google for user: {user_data.get('email', 'unknown')}")
+                raise ValidationError("Email not verified by Google")
 
-            # Check if Google OAuth is available
-            if not GOOGLE_OAUTH_AVAILABLE:
-                logger.error("Google OAuth not available")
-                return Response(
-                    {"error": "Google OAuth service unavailable"},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-
-            # Exchange code for tokens
-            tokens = exchange_code_for_tokens(code)
-            if not tokens:
-                logger.error("Failed to exchange code for tokens")
-                return Response(
-                    {"error": "Failed to authenticate with Google"},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-
-            # Get user info from ID token
-            user_data = get_user_info_from_id_token(tokens['id_token'])
-            if not user_data:
-                logger.error("Failed to get user info from ID token")
-                return Response(
-                    {"error": "Failed to get user information"},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-
-            # Create or get user
+            # Create or get user with transaction safety
             with transaction.atomic():
                 user, created = User.objects.get_or_create(
                     email=user_data['email'],
                     defaults={
                         'first_name': user_data.get('given_name', ''),
                         'last_name': user_data.get('family_name', ''),
+                        'is_email_verified': True,
                         'is_active': True
                     }
                 )
@@ -141,7 +103,7 @@ class GoogleAuthCallbackView(APIView):
 
                 logger.info(f"Generated JWT tokens for user: {user.email}")
 
-                return Response({
+                return {
                     'access_token': access_token,
                     'refresh_token': refresh_token,
                     'user': {
@@ -154,94 +116,171 @@ class GoogleAuthCallbackView(APIView):
                         'is_employer': user.is_employer(),
                         'is_admin': user.is_superuser
                     }
-                })
+                }
 
             except Exception as jwt_error:
                 logger.error(f"JWT generation failed: {jwt_error}")
-                return Response(
-                    {"error": "Authentication token generation failed"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+                raise ValidationError("Authentication token generation failed")
 
         except Exception as e:
+            logger.error(f"User authentication error: {str(e)}", exc_info=True)
+            raise
+
+
+# Google Sign-in views
+class GoogleAuthCallbackView(GoogleAuthMixin, APIView):
+    """
+    Google OAuth callback - exchanges authorization code for tokens
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        # Sanitize input
+        sanitized_data = sanitize_dict(request.data)
+        code = sanitized_data.get('code')
+        logger.debug(f"Received OAuth code: {code[:10] if code else 'None'}...")
+
+        if not code:
+            logger.warning("No authorization code provided in request")
+            return APIResponse.error("Authorization code is required", status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Check if Google OAuth is available
+            if not GOOGLE_OAUTH_AVAILABLE:
+                logger.error("Google OAuth not available")
+                return APIResponse.error("Google OAuth service unavailable", status.HTTP_503_SERVICE_UNAVAILABLE)
+
+            # Exchange code for tokens
+            tokens = exchange_code_for_tokens(code)
+            if not tokens:
+                logger.error("Failed to exchange code for tokens")
+                return APIResponse.error("Failed to authenticate with Google", status.HTTP_401_UNAUTHORIZED)
+
+            # Get user info from ID token
+            user_data = get_user_info_from_id_token(tokens['id_token'])
+            if not user_data:
+                logger.error("Failed to get user info from ID token")
+                return APIResponse.error("Failed to get user information", status.HTTP_401_UNAUTHORIZED)
+
+            # Authenticate user using shared method
+            result = self._authenticate_google_user(user_data, require_email_verification=False)
+            return APIResponse.success(result)
+
+        except ValidationError as e:
+            return APIResponse.error(str(e), status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
             logger.error(f"Google OAuth error: {str(e)}", exc_info=True)
-            return Response(
-                {"error": "Authentication failed"},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return APIResponse.error("Authentication failed", status.HTTP_401_UNAUTHORIZED)
+
+
+class GoogleCredentialAuthView(GoogleAuthMixin, APIView):
+    """
+    Google Sign-in with credential token (ID token)
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        # Sanitize input
+        sanitized_data = sanitize_dict(request.data)
+        credential = sanitized_data.get('credential')
+        logger.debug(f"Received Google credential token: {credential[:50] if credential else 'None'}...")
+
+        if not credential:
+            logger.warning("No credential provided in request")
+            return APIResponse.error("Google credential token is required", status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Check if Google OAuth is available
+            if not GOOGLE_OAUTH_AVAILABLE:
+                logger.error("Google OAuth not available")
+                return APIResponse.error("Google OAuth not available", status.HTTP_503_SERVICE_UNAVAILABLE)
+
+            # Extract user info directly from ID token (credential)
+            user_data = get_user_info_from_id_token(credential)
+            if not user_data:
+                logger.error("Failed to get user info from ID token")
+                return APIResponse.error("Failed to get user information", status.HTTP_401_UNAUTHORIZED)
+
+            # Authenticate user using shared method
+            result = self._authenticate_google_user(user_data, require_email_verification=True)
+            return APIResponse.success(result)
+
+        except ValidationError as e:
+            return APIResponse.error(str(e), status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Google credential authentication error: {str(e)}", exc_info=True)
+            return APIResponse.error("Authentication failed", status.HTTP_401_UNAUTHORIZED)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def google_refresh_token(request):
-    """
-    Refresh Google access token - equivalent to app.post('/auth/google/refresh-token', ...)
-    """
-    refresh_token = request.data.get('refreshToken')
+    """Refresh Google access token"""
+    # Sanitize input
+    sanitized_data = sanitize_dict(request.data)
+    refresh_token = sanitized_data.get('refreshToken')
 
     if not refresh_token:
-        return Response(
-            {"error": "Refresh token is required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return APIResponse.error("Refresh token is required", status.HTTP_400_BAD_REQUEST)
 
     try:
         if not GOOGLE_OAUTH_AVAILABLE:
-            return Response(
-                {"error": "Google OAuth not available"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
+            return APIResponse.error("Google OAuth not available", status.HTTP_503_SERVICE_UNAVAILABLE)
 
         # Refresh the access token
         credentials = refresh_access_token(refresh_token)
-
-        return Response(credentials, status=status.HTTP_200_OK)
+        return APIResponse.success(credentials)
 
     except Exception as e:
         logger.error(f"Token refresh error: {str(e)}")
-        return Response(
-            {"error": str(e)},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return APIResponse.error(str(e), status.HTTP_400_BAD_REQUEST)
+
 
 class GoogleClientIDView(APIView):
-    """
-    API View to provide Google Client ID to frontend
-    """
-    permission_classes = [AllowAny]  # Public endpoint
+    """API View to provide Google Client ID to frontend"""
+    permission_classes = [AllowAny]
 
     def get(self, request):
-        return Response({
+        return APIResponse.success({
             "client_id": settings.GOOGLE_OAUTH_CLIENT_ID
-        }, status=status.HTTP_200_OK)
+        })
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_google_client_id(request):
     """Return the Google OAuth client ID for frontend use (legacy endpoint)"""
-    return Response({
+    return APIResponse.success({
         'client_id': settings.GOOGLE_OAUTH_CLIENT_ID
-    }, status=status.HTTP_200_OK)
+    })
+
 
 @api_view(['POST'])
 @permission_classes([ProfilePermissions])
 def sign_out(request):
     """Blacklist the user's refresh token"""
     try:
-        refresh_token = request.data.get('refresh_token')
+        # Sanitize input
+        sanitized_data = sanitize_dict(request.data)
+        refresh_token = sanitized_data.get('refresh_token')
+
         if not refresh_token:
-            return Response({"error": "Refresh token is required"}, status=status.HTTP_400_BAD_REQUEST)
+            return APIResponse.error("Refresh token is required", status.HTTP_400_BAD_REQUEST)
 
         token = RefreshToken(refresh_token)
         token.blacklist()
-        return Response({"success": "User logged out successfully"}, status=status.HTTP_200_OK)
+        return APIResponse.success(message="User logged out successfully")
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return APIResponse.error(str(e), status.HTTP_400_BAD_REQUEST)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request):
     """API endpoint for user registration with role selection"""
-    serializer = UserRegistrationSerializer(data=request.data)
+    # Sanitize input
+    sanitized_data = sanitize_dict(request.data)
+    serializer = UserRegistrationSerializer(data=sanitized_data)
 
     if serializer.is_valid():
         user = serializer.save()
@@ -260,109 +299,10 @@ def register_user(request):
         }
 
         # Return tokens and user info
-        return Response({
+        return APIResponse.created({
             'access_token': str(refresh.access_token),
             'refresh_token': str(refresh),
             'user': user_info
-        }, status=status.HTTP_201_CREATED)
+        })
 
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class GoogleCredentialAuthView(APIView):
-    """
-    Google Sign-in with credential token (ID token)
-    Handles POST /api/auth/google/ endpoint
-    """
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        credential = request.data.get('credential')
-        logger.debug(f"Received Google credential token: {credential[:50] if credential else 'None'}...")
-
-        if not credential:
-            logger.warning("No credential provided in request")
-            return Response(
-                {"error": "Google credential token is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            # Check if Google OAuth is available
-            if not GOOGLE_OAUTH_AVAILABLE:
-                logger.error("Google OAuth not available")
-                return Response(
-                    {"error": "Google OAuth not available"},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-
-            # Extract user info directly from ID token (credential)
-            user_data = get_user_info_from_id_token(credential)
-            if not user_data:
-                logger.error("Failed to get user info from ID token")
-                return Response(
-                    {"error": "Failed to get user information"},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-
-            # Verify email is verified
-            if not user_data.get('email_verified', False):
-                logger.warning(f"Email not verified by Google for user: {user_data.get('email', 'unknown')}")
-                return Response(
-                    {"error": "Email not verified by Google"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Get or create user
-            with transaction.atomic():
-                user, created = User.objects.get_or_create(
-                    email=user_data['email'],
-                    defaults={
-                        'first_name': user_data.get('given_name', ''),
-                        'last_name': user_data.get('family_name', ''),
-                        'is_email_verified': True,
-                    }
-                )
-                if created:
-                    logger.info(f"Created new user: {user.email}")
-                else:
-                    logger.info(f"Existing user logged in: {user.email}")
-
-                # Create or get user profile
-                profile, _ = UserProfile.objects.get_or_create(user=user)
-
-            # Generate JWT tokens
-            try:
-                refresh = RefreshToken.for_user(user)
-                access_token = str(refresh.access_token)
-                refresh_token = str(refresh)
-
-                logger.info(f"Generated JWT tokens for user: {user.email}")
-
-                return Response({
-                    'access_token': access_token,
-                    'refresh_token': refresh_token,
-                    'user': {
-                        'id': user.id,
-                        'email': user.email,
-                        'first_name': user.first_name,
-                        'last_name': user.last_name,
-                        'role': user.get_role(),
-                        'is_applicant': user.is_applicant(),
-                        'is_employer': user.is_employer(),
-                        'is_admin': user.is_superuser
-                    }
-                })
-
-            except Exception as jwt_error:
-                logger.error(f"JWT generation failed: {jwt_error}")
-                return Response(
-                    {"error": "Authentication token generation failed"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-
-        except Exception as e:
-            logger.error(f"Google credential authentication error: {str(e)}", exc_info=True)
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+    return APIResponse.validation_error(serializer.errors)

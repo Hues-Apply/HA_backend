@@ -16,26 +16,54 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from django.conf import settings
+from django.conf.urls.static import static
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from rest_framework import status
+from django.db import connection
+from django.core.cache import cache
+import logging
 
+logger = logging.getLogger(__name__)
+
+@api_view(['GET'])
+def health_check(request):
+    """Health check endpoint for monitoring"""
+    try:
+        # Check database connection
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            db_status = "healthy"
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        db_status = "unhealthy"
+
+    # Check cache
+    try:
+        cache.set('health_check', 'ok', 10)
+        cache_status = "healthy" if cache.get('health_check') == 'ok' else "unhealthy"
+    except Exception as e:
+        logger.error(f"Cache health check failed: {e}")
+        cache_status = "unhealthy"
+
+    overall_status = "healthy" if db_status == "healthy" and cache_status == "healthy" else "unhealthy"
+
+    return Response({
+        'status': overall_status,
+        'database': db_status,
+        'cache': cache_status,
+        'timestamp': settings.TIME_ZONE
+    }, status=status.HTTP_200_OK if overall_status == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
-    # path('api/auth/', include('dj_rest_auth.urls')),
-    # path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
-    
-    
-    # path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    # path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-
-
-    # Google Sign-In URLs
-    path('', include('users.urls')),  # Include users URLs at root
-    
-    # API URLs
-    path('api/opportunities/', include('opportunities.api.urls')),
-    path('api/scholarships/', include('scholarships.urls')),
-    path('api/jobs/', include('jobs.urls')),
-
+    path('api/', include('users.urls')),
+    path('api/', include('opportunities.urls')),
+    path('api/', include('scholarships.urls')),
+    path('api/', include('jobs.urls')),
+    path('health/', health_check, name='health_check'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

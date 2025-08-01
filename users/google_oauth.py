@@ -2,140 +2,140 @@
 Simple Google OAuth 2.0 implementation for HuesApply backend
 Based on the pattern from: https://github.com/MomenSherif/react-oauth/issues/12
 """
-import requests
+import os
+import json
 import logging
+import traceback
+import requests
 from django.conf import settings
-from rest_framework.exceptions import AuthenticationFailed
+from django.core.exceptions import ValidationError
 
+# Configure logging
 logger = logging.getLogger(__name__)
 
 def exchange_code_for_tokens(code):
     """
-    Simple implementation to exchange Google OAuth code for tokens
-    Similar to: const { tokens } = await oAuth2Client.getToken(req.body.code);
+    Exchange Google OAuth authorization code for access and refresh tokens
     """
-    print("🔍 [OAUTH] Starting exchange_code_for_tokens...")
+    logger.info("Starting exchange_code_for_tokens...")
+
+    if not code:
+        logger.error("No authorization code provided")
+        raise ValidationError("Authorization code is required")
+
+    # Prepare request data
+    logger.debug("Preparing request data...")
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        'client_id': settings.GOOGLE_OAUTH_CLIENT_ID,
+        'client_secret': settings.GOOGLE_OAUTH_CLIENT_SECRET,
+        'code': code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': settings.GOOGLE_OAUTH_REDIRECT_URI,
+    }
+
     try:
-        # Google's token endpoint
-        token_url = 'https://oauth2.googleapis.com/token'
-        
-        print("🔍 [OAUTH] Preparing request data...")
-        # Prepare the request data
-        data = {
-            'code': code,
-            'client_id': settings.GOOGLE_OAUTH_CLIENT_ID,
-            'client_secret': settings.GOOGLE_OAUTH_CLIENT_SECRET,
-            'redirect_uri': 'postmessage',  # For web apps using popup/postMessage
-            'grant_type': 'authorization_code'
-        }
-        
-        print("🔍 [OAUTH] Making POST request to Google token endpoint...")
-        # Exchange code for tokens
-        response = requests.post(token_url, data=data)
-        
-        print(f"🔍 [OAUTH] Response status: {response.status_code}")
-        if response.status_code != 200:
-            logger.error(f"Token exchange failed: {response.text}")
-            raise AuthenticationFailed(f"Failed to exchange code for tokens: {response.text}")
-        
-        tokens = response.json()
-        print(f"✅ [OAUTH] Token exchange successful! Received keys: {list(tokens.keys())}")
-        
-        # The response contains:
-        # - access_token: for Google API calls
-        # - refresh_token: to refresh the access token (only on first auth)
-        # - id_token: JWT with user info
-        # - expires_in: token expiration time
-        
-        return tokens
-        
+        # Make POST request to Google token endpoint
+        logger.debug("Making POST request to Google token endpoint...")
+        response = requests.post(token_url, data=data, timeout=10)
+
+        logger.debug(f"Response status: {response.status_code}")
+
+        if response.status_code == 200:
+            tokens = response.json()
+            logger.info(f"Token exchange successful! Received keys: {list(tokens.keys())}")
+            return tokens
+        else:
+            logger.error(f"Token exchange failed with status {response.status_code}: {response.text}")
+            raise ValidationError(f"Token exchange failed: {response.text}")
+
     except requests.RequestException as e:
-        print(f"❌ [OAUTH] Network error during token exchange: {e}")
         logger.error(f"Network error during token exchange: {e}")
-        raise AuthenticationFailed(f"Network error: {e}")
+        raise ValidationError(f"Network error: {str(e)}")
     except Exception as e:
-        print(f"❌ [OAUTH] Unexpected error during token exchange: {e}")
-        print(f"❌ [OAUTH] Error type: {type(e).__name__}")
-        import traceback
-        print(f"❌ [OAUTH] Full traceback:\n{traceback.format_exc()}")
         logger.error(f"Unexpected error during token exchange: {e}")
-        raise AuthenticationFailed(f"Token exchange failed: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+        raise ValidationError(f"Unexpected error: {str(e)}")
+
 
 def get_user_info_from_id_token(id_token):
     """
-    Extract user information from the ID token (JWT)
-    This is simpler than making additional API calls
+    Extract user information from Google ID token
     """
-    print("🔍 [OAUTH] Starting get_user_info_from_id_token...")
+    logger.info("Starting get_user_info_from_id_token...")
+
     try:
-        print("🔍 [OAUTH] Importing Google OAuth modules...")
-        from google.oauth2 import id_token as google_id_token
+        # Import Google OAuth modules
+        logger.debug("Importing Google OAuth modules...")
         from google.auth.transport import requests as google_requests
-        print("✅ [OAUTH] Google OAuth modules imported successfully")
-        
-        print("🔍 [OAUTH] Verifying ID token...")
-        # Verify and decode the ID token
+        from google.oauth2 import id_token as google_id_token
+
+        logger.info("Google OAuth modules imported successfully")
+
+        # Verify ID token
+        logger.debug("Verifying ID token...")
         id_info = google_id_token.verify_oauth2_token(
-            id_token, 
-            google_requests.Request(), 
+            id_token,
+            google_requests.Request(),
             settings.GOOGLE_OAUTH_CLIENT_ID,
             clock_skew_in_seconds=60
         )
-        print("✅ [OAUTH] ID token verified successfully")
-        print("✅ [OAUTH] ID token verified successfully")
-        
-        print("🔍 [OAUTH] Extracting user data from ID token...")
-        # Extract user data from the ID token
+
+        logger.info("ID token verified successfully")
+
+        # Extract user data from ID token
+        logger.debug("Extracting user data from ID token...")
         user_data = {
-            'google_id': id_info['sub'],
-            'email': id_info['email'],
-            'email_verified': id_info.get('email_verified', False),
-            'first_name': id_info.get('given_name', ''),
-            'last_name': id_info.get('family_name', ''),
-            'name': id_info.get('name', ''),
+            'email': id_info.get('email'),
+            'given_name': id_info.get('given_name', ''),
+            'family_name': id_info.get('family_name', ''),
             'picture': id_info.get('picture', ''),
+            'sub': id_info.get('sub'),  # Google's unique user ID
         }
-        
-        print(f"✅ [OAUTH] User data extracted for: {user_data.get('email', 'unknown')}")
+
+        logger.info(f"User data extracted for: {user_data.get('email', 'unknown')}")
         return user_data
-        
+
     except Exception as e:
-        print(f"❌ [OAUTH] Failed to decode ID token: {e}")
-        print(f"❌ [OAUTH] Error type: {type(e).__name__}")
-        import traceback
-        print(f"❌ [OAUTH] Full traceback:\n{traceback.format_exc()}")
         logger.error(f"Failed to decode ID token: {e}")
-        raise AuthenticationFailed(f"Invalid ID token: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+        raise ValidationError(f"Invalid ID token: {str(e)}")
+
 
 def refresh_access_token(refresh_token):
     """
-    Refresh the access token using refresh token
-    Similar to: const { credentials } = await user.refreshAccessToken();
+    Refresh Google OAuth access token using refresh token
     """
+    logger.info("Starting refresh_access_token...")
+
+    if not refresh_token:
+        logger.error("No refresh token provided")
+        raise ValidationError("Refresh token is required")
+
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        'client_id': settings.GOOGLE_OAUTH_CLIENT_ID,
+        'client_secret': settings.GOOGLE_OAUTH_CLIENT_SECRET,
+        'refresh_token': refresh_token,
+        'grant_type': 'refresh_token',
+    }
+
     try:
-        refresh_url = 'https://oauth2.googleapis.com/token'
-        
-        data = {
-            'refresh_token': refresh_token,
-            'client_id': settings.GOOGLE_OAUTH_CLIENT_ID,
-            'client_secret': settings.GOOGLE_OAUTH_CLIENT_SECRET,
-            'grant_type': 'refresh_token'
-        }
-        
-        response = requests.post(refresh_url, data=data)
-        
-        if response.status_code != 200:
-            logger.error(f"Token refresh failed: {response.text}")
-            raise AuthenticationFailed(f"Failed to refresh token: {response.text}")
-        
-        credentials = response.json()
-        logger.info("Successfully refreshed access token")
-        
-        return credentials
-        
+        response = requests.post(token_url, data=data, timeout=10)
+
+        if response.status_code == 200:
+            tokens = response.json()
+            logger.info("Access token refreshed successfully")
+            return tokens
+        else:
+            logger.error(f"Token refresh failed with status {response.status_code}: {response.text}")
+            raise ValidationError(f"Token refresh failed: {response.text}")
+
     except requests.RequestException as e:
         logger.error(f"Network error during token refresh: {e}")
-        raise AuthenticationFailed(f"Network error: {e}")
+        raise ValidationError(f"Network error: {str(e)}")
     except Exception as e:
         logger.error(f"Unexpected error during token refresh: {e}")
-        raise AuthenticationFailed(f"Token refresh failed: {e}")
+        raise ValidationError(f"Unexpected error: {str(e)}")

@@ -121,6 +121,16 @@ REST_FRAMEWORK = {
         # 'rest_framework.authentication.TokenAuthentication',
 
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',  # Anonymous users: 100 requests per hour
+        'user': '1000/hour',  # Authenticated users: 1000 requests per hour
+        'burst': '60/minute',  # Burst rate: 60 requests per minute
+        'sustained': '1000/hour',  # Sustained rate: 1000 requests per hour
+    }
 }
 
 # Simple JWT Settings - Using HMAC SHA256 instead of RSA to avoid cryptography issues
