@@ -27,11 +27,25 @@ try:
     GOOGLE_OAUTH_AVAILABLE = True
     logger.info("Google OAuth functions imported successfully")
 except ImportError as e:
-    logger.warning(f"Google OAuth modules not available: {e}. OAuth functionality will be disabled.")
+    logger.error(f"Google OAuth modules not available: {e}. OAuth functionality will be disabled.")
     GOOGLE_OAUTH_AVAILABLE = False
+    # Define stub functions to prevent runtime errors
+    def exchange_code_for_tokens(code):
+        raise ValidationError("Google OAuth not available")
+    def get_user_info_from_id_token(token):
+        raise ValidationError("Google OAuth not available")
+    def refresh_access_token(token):
+        raise ValidationError("Google OAuth not available")
 except Exception as e:
     logger.error(f"Unexpected error importing Google OAuth: {e}")
     GOOGLE_OAUTH_AVAILABLE = False
+    # Define stub functions to prevent runtime errors
+    def exchange_code_for_tokens(code):
+        raise ValidationError("Google OAuth not available")
+    def get_user_info_from_id_token(token):
+        raise ValidationError("Google OAuth not available")
+    def refresh_access_token(token):
+        raise ValidationError("Google OAuth not available")
 
 User = get_user_model()
 
@@ -70,15 +84,19 @@ class GoogleAuthMixin:
     def _authenticate_google_user(self, user_data, require_email_verification=True):
         """Shared method to authenticate or create Google user"""
         try:
+            user_email = user_data.get('email')
+            if not user_email:
+                raise ValidationError("Email is required for authentication")
+            
             # Verify email is verified if required
             if require_email_verification and not user_data.get('email_verified', False):
-                logger.warning(f"Email not verified by Google for user: {user_data.get('email', 'unknown')}")
+                logger.warning(f"Email not verified by Google for user: {user_email}")
                 raise ValidationError("Email not verified by Google")
 
             # Create or get user with transaction safety
             with transaction.atomic():
                 user, created = User.objects.get_or_create(
-                    email=user_data['email'],
+                    email=user_email,
                     defaults={
                         'first_name': user_data.get('given_name', ''),
                         'last_name': user_data.get('family_name', ''),
@@ -89,11 +107,20 @@ class GoogleAuthMixin:
 
                 if created:
                     logger.info(f"Created new user: {user.email}")
+                    # Set default role for new users
+                    user.set_as_applicant()
                 else:
                     logger.info(f"Existing user logged in: {user.email}")
 
                 # Create or get user profile
                 profile, _ = UserProfile.objects.get_or_create(user=user)
+                
+                # Update profile with Google data
+                if user_data.get('picture'):
+                    profile.google_picture = user_data['picture']
+                if user_data.get('sub'):
+                    profile.google_id = user_data['sub']
+                profile.save()
 
             # Generate JWT tokens
             try:
@@ -114,7 +141,8 @@ class GoogleAuthMixin:
                         'role': user.get_role(),
                         'is_applicant': user.is_applicant(),
                         'is_employer': user.is_employer(),
-                        'is_admin': user.is_superuser
+                        'is_admin': user.is_superuser,
+                        'is_new_user': created  # Add this field for frontend routing
                     }
                 }
 
@@ -146,21 +174,27 @@ class GoogleAuthCallbackView(GoogleAuthMixin, APIView):
 
         try:
             # Check if Google OAuth is available
-            if not GOOGLE_OAUTH_AVAILABLE:
-                logger.error("Google OAuth not available")
+            if not settings.GOOGLE_OAUTH_ENABLED:
+                logger.error("Google OAuth not enabled")
                 return APIResponse.error("Google OAuth service unavailable", status.HTTP_503_SERVICE_UNAVAILABLE)
 
+            logger.debug(f"Processing OAuth code of length: {len(code) if code else 0}")
+            
             # Exchange code for tokens
             tokens = exchange_code_for_tokens(code)
             if not tokens:
                 logger.error("Failed to exchange code for tokens")
                 return APIResponse.error("Failed to authenticate with Google", status.HTTP_401_UNAUTHORIZED)
 
+            logger.debug(f"Received tokens with keys: {list(tokens.keys()) if tokens else 'None'}")
+
             # Get user info from ID token
             user_data = get_user_info_from_id_token(tokens['id_token'])
             if not user_data:
                 logger.error("Failed to get user info from ID token")
                 return APIResponse.error("Failed to get user information", status.HTTP_401_UNAUTHORIZED)
+
+            logger.debug(f"Retrieved user data for email: {user_data.get('email', 'unknown')}")
 
             # Authenticate user using shared method
             result = self._authenticate_google_user(user_data, require_email_verification=False)
@@ -191,8 +225,8 @@ class GoogleCredentialAuthView(GoogleAuthMixin, APIView):
 
         try:
             # Check if Google OAuth is available
-            if not GOOGLE_OAUTH_AVAILABLE:
-                logger.error("Google OAuth not available")
+            if not settings.GOOGLE_OAUTH_ENABLED:
+                logger.error("Google OAuth not enabled")
                 return APIResponse.error("Google OAuth not available", status.HTTP_503_SERVICE_UNAVAILABLE)
 
             # Extract user info directly from ID token (credential)
@@ -283,26 +317,30 @@ def register_user(request):
     serializer = UserRegistrationSerializer(data=sanitized_data)
 
     if serializer.is_valid():
-        user = serializer.save()
+        try:
+            user = serializer.save()
 
-        # Generate authentication tokens
-        refresh = RefreshToken.for_user(user)
+            # Generate authentication tokens
+            refresh = RefreshToken.for_user(user)
 
-        # Prepare user data
-        user_info = {
-            'id': user.id,
-            'email': user.email,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'role': user.get_role(),
-            'is_new_user': True
-        }
+            # Prepare user data
+            user_info = {
+                'id': user.id,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'role': user.get_role(),
+                'is_new_user': True
+            }
 
-        # Return tokens and user info
-        return APIResponse.created({
-            'access_token': str(refresh.access_token),
-            'refresh_token': str(refresh),
-            'user': user_info
-        })
+            # Return tokens and user info
+            return APIResponse.created({
+                'access_token': str(refresh.access_token),
+                'refresh_token': str(refresh),
+                'user': user_info
+            })
+        except Exception as e:
+            logger.error(f"User registration failed: {str(e)}")
+            return APIResponse.error("Registration failed", status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return APIResponse.validation_error(serializer.errors)

@@ -23,31 +23,57 @@ def exchange_code_for_tokens(code):
         logger.error("No authorization code provided")
         raise ValidationError("Authorization code is required")
 
+    # Check if OAuth is properly configured
+    if not getattr(settings, 'GOOGLE_OAUTH_ENABLED', False):
+        logger.error("Google OAuth not enabled in settings")
+        raise ValidationError("Google OAuth service unavailable")
+
+    if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
+        logger.error("Google OAuth credentials not configured")
+        raise ValidationError("Google OAuth service misconfigured")
+
     # Prepare request data
     logger.debug("Preparing request data...")
     token_url = "https://oauth2.googleapis.com/token"
+    
+    # For authorization code flow from JavaScript applications, 
+    # Google expects 'postmessage' as the redirect_uri
+    redirect_uri = 'postmessage'
+    logger.debug(f"Using redirect_uri: {redirect_uri}")
+    
     data = {
         'client_id': settings.GOOGLE_OAUTH_CLIENT_ID,
         'client_secret': settings.GOOGLE_OAUTH_CLIENT_SECRET,
         'code': code,
         'grant_type': 'authorization_code',
-        'redirect_uri': settings.GOOGLE_OAUTH_REDIRECT_URI,
+        'redirect_uri': redirect_uri,
     }
 
     try:
         # Make POST request to Google token endpoint
         logger.debug("Making POST request to Google token endpoint...")
+        logger.debug(f"Request data: client_id={data['client_id'][:10]}..., grant_type={data['grant_type']}, redirect_uri={data['redirect_uri']}")
+        
         response = requests.post(token_url, data=data, timeout=10)
 
         logger.debug(f"Response status: {response.status_code}")
+        logger.debug(f"Response headers: {dict(response.headers)}")
 
         if response.status_code == 200:
             tokens = response.json()
             logger.info(f"Token exchange successful! Received keys: {list(tokens.keys())}")
             return tokens
         else:
-            logger.error(f"Token exchange failed with status {response.status_code}: {response.text}")
-            raise ValidationError(f"Token exchange failed: {response.text}")
+            error_text = response.text
+            logger.error(f"Token exchange failed with status {response.status_code}: {error_text}")
+            
+            # Try to parse error JSON for better error reporting
+            try:
+                error_json = response.json()
+                error_msg = error_json.get('error_description', error_json.get('error', error_text))
+                raise ValidationError(f"Token exchange failed: {error_msg}")
+            except (ValueError, KeyError):
+                raise ValidationError(f"Token exchange failed: {error_text}")
 
     except requests.RequestException as e:
         logger.error(f"Network error during token exchange: {e}")

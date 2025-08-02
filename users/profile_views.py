@@ -1,7 +1,7 @@
 import logging
 import traceback
 import os
-import magic
+import mimetypes
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import ProfilePermissions, DocumentPermissions
@@ -56,12 +56,18 @@ class SecureFileUploadMixin:
             if file_extension not in self.ALLOWED_FILE_TYPES.values():
                 raise ValidationError(f"File type not allowed. Allowed types: {', '.join(self.ALLOWED_FILE_TYPES.values())}")
 
-            # Read first 2048 bytes for MIME type detection
+            # Read first 2048 bytes for content validation
             file_content = uploaded_file.read(2048)
             uploaded_file.seek(0)  # Reset file pointer
 
-            # Detect MIME type
-            detected_mime = magic.from_buffer(file_content, mime=True)
+            # Detect MIME type using Python's built-in mimetypes
+            detected_mime, _ = mimetypes.guess_type(uploaded_file.name)
+            
+            # If mimetypes can't detect, fall back to extension-based check
+            if not detected_mime:
+                file_extension = os.path.splitext(uploaded_file.name)[1].lower()
+                extension_to_mime = {v: k for k, v in self.ALLOWED_FILE_TYPES.items()}
+                detected_mime = extension_to_mime.get(file_extension)
 
             # Validate MIME type
             if detected_mime not in self.ALLOWED_FILE_TYPES:

@@ -10,8 +10,13 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 import os
+import logging
 from dotenv import load_dotenv
 from urllib.parse import urlparse
+
+# Configure logging before using it
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 from pathlib import Path
@@ -67,21 +72,36 @@ AUTH_USER_MODEL = 'users.CustomUser'
 # Google OAuth Settings
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID')
 GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET')
-GOOGLE_OAUTH_REDIRECT_URI = os.environ.get('GOOGLE_OAUTH_REDIRECT_URI', 'https://ha-backend-pq2f.vercel.app/api/auth/google/callback/')
+
+# Environment-aware redirect URI
+# NOTE: When using authorization code flow from JavaScript, Google expects 'postmessage' as redirect_uri
+# The backend endpoint redirect URI is only used for debugging/reference
+if DEBUG:
+    default_redirect = 'http://localhost:8000/api/auth/google/callback/'
+else:
+    default_redirect = 'https://backend.huesapply.com/api/auth/google/callback/'
+
+GOOGLE_OAUTH_REDIRECT_URI = os.environ.get('GOOGLE_OAUTH_REDIRECT_URI', default_redirect)
 
 # For compatibility with existing code, also set these as GOOGLE_CLIENT_ID/SECRET
 GOOGLE_CLIENT_ID = GOOGLE_OAUTH_CLIENT_ID
 GOOGLE_CLIENT_SECRET = GOOGLE_OAUTH_CLIENT_SECRET
 
+# Graceful OAuth validation - warn but don't crash
+GOOGLE_OAUTH_ENABLED = True
 if not GOOGLE_OAUTH_CLIENT_ID:
-    raise ValueError(
-        'Google OAuth Client ID not found. Please set it in your environment variables.'
+    logger.warning(
+        'GOOGLE_OAUTH_CLIENT_ID not found. Google OAuth will be disabled. '
+        'Set GOOGLE_OAUTH_CLIENT_ID environment variable to enable.'
     )
+    GOOGLE_OAUTH_ENABLED = False
 
 if not GOOGLE_OAUTH_CLIENT_SECRET:
-    raise ValueError(
-        'Google OAuth Client Secret not found. Please set it in your environment variables.'
+    logger.warning(
+        'GOOGLE_OAUTH_CLIENT_SECRET not found. Google OAuth will be disabled. '
+        'Set GOOGLE_OAUTH_CLIENT_SECRET environment variable to enable.'
     )
+    GOOGLE_OAUTH_ENABLED = False
 
 # Frontend URL for redirecting after OAuth flow
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
@@ -118,8 +138,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        # 'rest_framework.authentication.TokenAuthentication',
-
+        'rest_framework.authentication.SessionAuthentication',  # Enable for admin/debugging
     ],
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
@@ -133,20 +152,29 @@ REST_FRAMEWORK = {
     }
 }
 
-# Simple JWT Settings - Using HMAC SHA256 instead of RSA to avoid cryptography issues
+# Simple JWT Settings - Using separate signing key for security
 from datetime import timedelta
+
+# JWT Signing Key - separate from Django SECRET_KEY for security
+JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY', SECRET_KEY)
+if JWT_SIGNING_KEY == SECRET_KEY:
+    logger.warning(
+        'Using Django SECRET_KEY for JWT signing. Set JWT_SIGNING_KEY environment variable '
+        'for better security and key rotation capabilities.'
+    )
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),  # Reduced from 7 days
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',  # Use HMAC SHA256 instead of RSA algorithms
-    'SIGNING_KEY': SECRET_KEY,
+    'SIGNING_KEY': JWT_SIGNING_KEY,
     'VERIFYING_KEY': None,
     'AUTH_HEADER_TYPES': ('Bearer',),
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
+    'UPDATE_LAST_LOGIN': True,  # Track last login
 }
 
 MIDDLEWARE = [
