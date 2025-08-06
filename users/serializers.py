@@ -5,9 +5,24 @@ from .models import (
 )
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    has_cv_in_gcs = serializers.SerializerMethodField()
+    cv_download_url = serializers.SerializerMethodField()
+
     class Meta:
         model = UserProfile
-        fields = ['name', 'email', 'profile_picture', 'phone_number', 'country', 'goal', 'cv_file', 'cv_filename', 'cv_mime']
+        fields = [
+            'name', 'email', 'profile_picture', 'phone_number', 'country', 'goal',
+            'cv_gcs_path', 'cv_public_url', 'cv_filename', 'cv_mime', 'cv_uploaded_at',
+            'has_cv_in_gcs', 'cv_download_url',
+            'cv_file'  # Legacy field
+        ]
+        read_only_fields = ['cv_gcs_path', 'cv_public_url', 'cv_uploaded_at', 'has_cv_in_gcs', 'cv_download_url']
+
+    def get_has_cv_in_gcs(self, obj):
+        return obj.has_cv_in_gcs()
+
+    def get_cv_download_url(self, obj):
+        return obj.get_cv_download_url()
 
 
 class CareerProfileSerializer(serializers.ModelSerializer):
@@ -102,13 +117,28 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class DocumentSerializer(serializers.ModelSerializer):
     """Serializer for Document uploads"""
+    download_url = serializers.SerializerMethodField()
+    is_stored_in_gcs = serializers.SerializerMethodField()
+
     class Meta:
         model = Document
         fields = [
-            'id', 'document_type', 'file', 'original_filename',
-            'processing_status', 'uploaded_at', 'processed_at', 'error_message'
+            'id', 'document_type', 'original_filename', 'file_size', 'content_type',
+            'gcs_path', 'gcs_public_url', 'gcs_bucket_name', 'download_url', 'is_stored_in_gcs',
+            'processing_status', 'uploaded_at', 'processed_at', 'error_message',
+            'file'  # Legacy field
         ]
-        read_only_fields = ['id', 'uploaded_at', 'processed_at', 'processing_status', 'error_message', 'original_filename']
+        read_only_fields = [
+            'id', 'uploaded_at', 'processed_at', 'processing_status', 'error_message',
+            'original_filename', 'gcs_path', 'gcs_public_url', 'gcs_bucket_name',
+            'file_size', 'content_type', 'download_url', 'is_stored_in_gcs'
+        ]
+
+    def get_download_url(self, obj):
+        return obj.get_download_url()
+
+    def get_is_stored_in_gcs(self, obj):
+        return obj.is_stored_in_gcs()
 
     def to_internal_value(self, data):
         # Handle different field names for file upload
@@ -204,6 +234,12 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
     phone_number = serializers.SerializerMethodField()
     goal = serializers.SerializerMethodField()
 
+    # CV Information from UserProfile
+    cv_filename = serializers.SerializerMethodField()
+    cv_uploaded_at = serializers.SerializerMethodField()
+    has_cv_in_gcs = serializers.SerializerMethodField()
+    cv_download_url = serializers.SerializerMethodField()
+
     # Career Profile
     career_profile = serializers.SerializerMethodField()
 
@@ -236,6 +272,9 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
 
             # Personal info
             'profile_picture', 'phone_number', 'goal',
+
+            # CV info
+            'cv_filename', 'cv_uploaded_at', 'has_cv_in_gcs', 'cv_download_url',
 
             # Career
             'career_profile',
@@ -279,6 +318,38 @@ class ComprehensiveUserProfileSerializer(serializers.ModelSerializer):
         except:
             pass
         return ""
+
+    def get_cv_filename(self, obj):
+        try:
+            if hasattr(obj, 'profile'):
+                return obj.profile.cv_filename
+        except:
+            pass
+        return None
+
+    def get_cv_uploaded_at(self, obj):
+        try:
+            if hasattr(obj, 'profile') and obj.profile.cv_uploaded_at:
+                return obj.profile.cv_uploaded_at.isoformat()
+        except:
+            pass
+        return None
+
+    def get_has_cv_in_gcs(self, obj):
+        try:
+            if hasattr(obj, 'profile'):
+                return obj.profile.has_cv_in_gcs()
+        except:
+            pass
+        return False
+
+    def get_cv_download_url(self, obj):
+        try:
+            if hasattr(obj, 'profile'):
+                return obj.profile.get_cv_download_url()
+        except:
+            pass
+        return None
 
     def get_career_profile(self, obj):
         try:

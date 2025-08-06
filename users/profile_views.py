@@ -2,6 +2,7 @@ import logging
 import traceback
 import os
 import mimetypes
+import uuid
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from .permissions import ProfilePermissions, DocumentPermissions
@@ -14,14 +15,25 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError
 from django.conf import settings
+from .models import UserProfile, Document, OpportunitiesInterest, RecommendationPriority
+from .serializers import UserProfileSerializer, DocumentSerializer, OpportunitiesInterestSerializer, RecommendationPrioritySerializer
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# GCS imports
+try:
+    from google.cloud import storage
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+    logger.warning("Google Cloud Storage not available. Install google-cloud-storage package.")
+
 from .models import Document, ParsedProfile, ProjectsProfile, UserGoal, CustomUser
 from .serializers import (
     DocumentSerializer, EducationProfileSerializer, ParsedProfileSerializer,
-    ProfileCompletionSerializer, ProjectsProfileSerializer, UserGoalUpdateSerializer, UserGoalSerializer
+    ProfileCompletionSerializer, ProjectsProfileSerializer, UserGoalUpdateSerializer, UserGoalSerializer,
+    OpportunitiesInterestSerializer, RecommendationPrioritySerializer
 )
 
 
@@ -39,6 +51,57 @@ class SecureFileUploadMixin:
 
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_FILENAME_LENGTH = 255
+
+    def upload_to_gcs(self, file_data, filename, user_id, file_type='cv'):
+        """Upload file to Google Cloud Storage"""
+        if not GCS_AVAILABLE:
+            logger.error("GCS not available. Google Cloud Storage is required for file uploads.")
+            raise ValidationError("File upload service is not available. Please contact support.")
+
+        try:
+            # Initialize GCS client
+            client = storage.Client()
+            bucket_name = getattr(settings, 'GCS_BUCKET_NAME', 'huesapply-user_documents')
+            bucket = client.bucket(bucket_name)
+
+            # Generate unique filename
+            file_extension = os.path.splitext(filename)[1]
+            unique_filename = f"{file_type}/{user_id}/{uuid.uuid4()}{file_extension}"
+
+            # Create blob and upload
+            blob = bucket.blob(unique_filename)
+            content_type = self._get_content_type(file_extension)
+            blob.upload_from_string(file_data, content_type=content_type)
+
+            logger.info(f"Successfully uploaded {filename} to GCS: {unique_filename}")
+
+            return {
+                'gcs_path': unique_filename,
+                'gcs_public_url': blob.public_url,
+                'gcs_bucket_name': bucket_name,
+                'file_size': len(file_data),
+                'content_type': content_type
+            }
+        except Exception as e:
+            logger.error(f"GCS upload failed: {str(e)}")
+            raise ValidationError(f"Failed to upload file to cloud storage: {str(e)}")
+
+    def _upload_to_local(self, file_data, filename, user_id, file_type='cv'):
+        """Local storage upload - DEPRECATED for Vercel deployment"""
+        raise ValidationError("Local file storage is not supported. Please use Google Cloud Storage.")
+
+    def _get_content_type(self, extension):
+        """Get content type for file extension"""
+        content_types = {
+            '.pdf': 'application/pdf',
+            '.doc': 'application/msword',
+            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.txt': 'text/plain',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png'
+        }
+        return content_types.get(extension.lower(), 'application/octet-stream')
 
     def validate_file(self, uploaded_file):
         """Validate uploaded file for security"""
@@ -62,7 +125,7 @@ class SecureFileUploadMixin:
 
             # Detect MIME type using Python's built-in mimetypes
             detected_mime, _ = mimetypes.guess_type(uploaded_file.name)
-            
+
             # If mimetypes can't detect, fall back to extension-based check
             if not detected_mime:
                 file_extension = os.path.splitext(uploaded_file.name)[1].lower()
@@ -179,24 +242,60 @@ class DocumentUploadView(SecureFileUploadMixin, APIView):
             uploaded_file = request.FILES['file']
             self.validate_file(uploaded_file)
 
-            # Create document instance with validated file
-            serializer = DocumentSerializer(data=request.data)
-            if serializer.is_valid():
-                document = serializer.save(user=request.user)
+            # Read file data
+            file_data = uploaded_file.read()
 
-                # Set status to uploaded (parsing will be done on frontend)
-                document.processing_status = 'uploaded'
-                document.save()
+            # Upload to GCS
+            gcs_result = self.upload_to_gcs(
+                file_data,
+                uploaded_file.name,
+                request.user.id,
+                'documents'
+            )
 
-                logger.info(f"Document uploaded successfully: {document.id} by user {request.user.id}")
+            # Create document instance with GCS data
+            document_data = {
+                'user': request.user,
+                'document_type': request.data.get('document_type', 'cv'),
+                'original_filename': uploaded_file.name,
+                'gcs_path': gcs_result['gcs_path'],
+                'gcs_public_url': gcs_result['gcs_public_url'],
+                'gcs_bucket_name': gcs_result['gcs_bucket_name'],
+                'file_size': gcs_result['file_size'],
+                'content_type': gcs_result['content_type'],
+                'processing_status': 'uploaded'
+            }
 
-                return Response({
-                    'success': True,
-                    'document_id': str(document.id),
-                    'message': 'Document uploaded successfully. Please send parsed data to complete profile.'
-                }, status=status.HTTP_200_OK)
+            # Create document
+            from .models import Document, UserProfile
+            document = Document.objects.create(**document_data)
 
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # Also update UserProfile with CV information
+            profile, created = UserProfile.objects.get_or_create(
+                user=request.user,
+                defaults={}
+            )
+
+            # Update profile with GCS data
+            profile.cv_gcs_path = gcs_result['gcs_path']
+            profile.cv_public_url = gcs_result['gcs_public_url']
+            profile.cv_filename = uploaded_file.name
+            profile.cv_mime = gcs_result['content_type']
+            profile.cv_uploaded_at = timezone.now()
+
+            # Clear legacy binary data
+            profile.cv_file = None
+            profile.save()
+
+            logger.info(f"Document uploaded to GCS: {document.id} by user {request.user.id}")
+
+            return Response({
+                'success': True,
+                'document_id': str(document.id),
+                'gcs_path': gcs_result['gcs_path'],
+                'download_url': gcs_result['gcs_public_url'],
+                'message': 'Document uploaded to cloud storage successfully.'
+            }, status=status.HTTP_200_OK)
 
         except ValidationError as e:
             logger.warning(f"File upload validation failed: {str(e)}")
@@ -393,6 +492,33 @@ def get_comprehensive_user_profile(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])  # Allow admin access to any user profile
+def get_user_profile_by_id(request, user_id):
+    """Get comprehensive user profile data by user ID (for admin purposes)"""
+    try:
+        from .serializers import ComprehensiveUserProfileSerializer
+        from .models import CustomUser
+
+        # Get the user by ID
+        user = CustomUser.objects.get(id=user_id)
+
+        serializer = ComprehensiveUserProfileSerializer(user)
+        return Response({
+            'success': True,
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    except CustomUser.DoesNotExist:
+        return Response({
+            'error': 'User not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': f'Failed to retrieve user profile: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 # Profile Management Endpoints for Individual Sections
 
 @api_view(['POST'])
@@ -486,6 +612,79 @@ def create_project_profile(request):
             'error': f'Failed to create project profile: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+@api_view(['PUT', 'DELETE'])
+@permission_classes([ProfilePermissions])
+def education_detail_view(request, pk):
+    """Update or delete education entry"""
+    try:
+        from .models import EducationProfile
+
+        education = EducationProfile.objects.get(pk=pk, user=request.user)
+    except EducationProfile.DoesNotExist:
+        return Response({
+            'error': 'Education entry not found or does not belong to you'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'PUT':
+        serializer = EducationProfileSerializer(education, data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'success': True,
+                'data': serializer.data,
+                'message': 'Education entry updated successfully'
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            'error': 'Invalid data provided',
+            'details': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.method == 'DELETE':
+        education.delete()
+        return Response({
+            'success': True,
+            'message': 'Education entry deleted successfully'
+        }, status=status.HTTP_200_OK)
+
+
+@api_view(['PUT', 'DELETE'])
+@permission_classes([ProfilePermissions])
+def experience_detail_view(request, pk):
+    """Update or delete experience entry"""
+    try:
+        from .models import ExperienceProfile
+
+        experience = ExperienceProfile.objects.get(pk=pk, user=request.user)
+    except ExperienceProfile.DoesNotExist:
+        return Response({
+            'error': 'Experience entry not found or does not belong to you'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'PUT':
+        serializer = ExperienceProfileSerializer(experience, data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'success': True,
+                'data': serializer.data,
+                'message': 'Experience entry updated successfully'
+            }, status=status.HTTP_200_OK)
+
+        return Response({
+            'error': 'Invalid data provided',
+            'details': serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.method == 'DELETE':
+        experience.delete()
+        return Response({
+            'success': True,
+            'message': 'Experience entry deleted successfully'
+        }, status=status.HTTP_200_OK)
+
+
 @api_view(['PUT', 'DELETE'])
 @permission_classes([ProfilePermissions])
 def project_detail_view(request, pk):
@@ -558,9 +757,6 @@ def manage_career_profile(request):
 def manage_opportunities_interest(request):
     """Create or update opportunities interest"""
     try:
-        from .models import OpportunitiesInterest
-        from .serializers import OpportunitiesInterestSerializer
-
         if request.method == 'GET':
             try:
                 interest = OpportunitiesInterest.objects.get(user=request.user)
@@ -688,9 +884,29 @@ def manage_personal_profile(request):
             # Handle CV upload if present
             if 'cv_file' in request.FILES:
                 uploaded_file = request.FILES['cv_file']
-                profile.cv_file = uploaded_file.read()
+
+                # Create mixin instance for validation and upload
+                upload_handler = SecureFileUploadMixin()
+                upload_handler.validate_file(uploaded_file)
+
+                # Read file data and upload to GCS
+                file_data = uploaded_file.read()
+                gcs_result = upload_handler.upload_to_gcs(
+                    file_data,
+                    uploaded_file.name,
+                    request.user.id,
+                    'cv'
+                )
+
+                # Update profile with GCS data
+                profile.cv_gcs_path = gcs_result['gcs_path']
+                profile.cv_public_url = gcs_result['gcs_public_url']
                 profile.cv_filename = uploaded_file.name
-                profile.cv_mime = uploaded_file.content_type
+                profile.cv_mime = gcs_result['content_type']
+                profile.cv_uploaded_at = timezone.now()
+
+                # Clear legacy binary data
+                profile.cv_file = None
 
             # Also update user's basic info
             if 'first_name' in request.data:

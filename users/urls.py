@@ -30,12 +30,17 @@ urlpatterns = [
     path('profile/update-goals/', profile_views.update_user_goals, name='update-user-goals'),
     path('profile/goals/', profile_views.get_user_goals, name='get-user-goals'),
 
+    # Admin endpoints for user profile access
+    path('users/<int:user_id>/profile/', profile_views.get_user_profile_by_id, name='get-user-profile-by-id'),
+
     # Personal profile management
     path('profile/personal/', profile_views.manage_personal_profile, name='manage-personal-profile'),
 
     # Individual Profile Section Management
     path('profile/education/', profile_views.create_education_profile, name='create-education-profile'),
+    path('profile/education/<int:pk>/', profile_views.education_detail_view, name='education-detail'),
     path('profile/experience/', profile_views.create_experience_profile, name='create-experience-profile'),
+    path('profile/experience/<int:pk>/', profile_views.experience_detail_view, name='experience-detail'),
     path('profile/project/', profile_views.create_project_profile, name='create-project-profile'),
     path('profile/project/<int:pk>/', profile_views.project_detail_view),
     path('profile/career/', profile_views.manage_career_profile, name='manage-career-profile'),

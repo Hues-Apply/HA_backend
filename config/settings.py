@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 from pathlib import Path
 
+# Setup Google Cloud credentials early in Django startup
+from utils.google_credentials import setup_google_credentials
+setup_google_credentials()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -86,6 +89,9 @@ GOOGLE_OAUTH_REDIRECT_URI = os.environ.get('GOOGLE_OAUTH_REDIRECT_URI', default_
 # For compatibility with existing code, also set these as GOOGLE_CLIENT_ID/SECRET
 GOOGLE_CLIENT_ID = GOOGLE_OAUTH_CLIENT_ID
 GOOGLE_CLIENT_SECRET = GOOGLE_OAUTH_CLIENT_SECRET
+
+# Google Cloud Storage Settings
+GCS_BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', 'huesapply-user_documents')
 
 # Graceful OAuth validation - warn but don't crash
 GOOGLE_OAUTH_ENABLED = True
@@ -347,5 +353,6 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
 
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+# Media files - Using GCS instead of local storage for Vercel deployment
+# MEDIA_URL = '/media/'
+# MEDIA_ROOT = BASE_DIR / 'media'

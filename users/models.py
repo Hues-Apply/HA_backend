@@ -135,10 +135,32 @@ class UserProfile(models.Model):
     google_access_token = models.TextField(blank=True, null=True)
     google_refresh_token = models.TextField(blank=True, null=True)
 
-    # Temporary CV storage
-    cv_file = models.BinaryField(null=True, blank=True)
+    # GCS CV storage
+    cv_gcs_path = models.CharField(max_length=500, blank=True, null=True, help_text="Path to CV file in Google Cloud Storage")
+    cv_public_url = models.URLField(blank=True, null=True, help_text="Public URL for CV file in GCS")
     cv_filename = models.CharField(max_length=255, blank=True, null=True)
     cv_mime = models.CharField(max_length=100, blank=True, null=True)
+    cv_uploaded_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when CV was uploaded to GCS")
+    
+    # Legacy binary storage (kept for migration - can be removed after data migration)
+    cv_file = models.BinaryField(null=True, blank=True, help_text="Legacy binary storage - deprecated")
+
+    def has_cv_in_gcs(self):
+        """Check if user has a CV stored in GCS"""
+        return bool(self.cv_gcs_path and self.cv_public_url)
+    
+    def get_cv_download_url(self):
+        """Get the CV download URL (GCS public URL or fallback)"""
+        return self.cv_public_url if self.has_cv_in_gcs() else None
+    
+    def clear_cv_data(self):
+        """Clear all CV-related data"""
+        self.cv_gcs_path = None
+        self.cv_public_url = None
+        self.cv_filename = None
+        self.cv_mime = None
+        self.cv_uploaded_at = None
+        self.cv_file = None
 
 
 
@@ -259,11 +281,25 @@ class Document(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='documents')
     document_type = models.CharField(max_length=20, choices=DOCUMENT_TYPES, default='cv')
+    
+    # GCS storage fields
+    gcs_path = models.CharField(max_length=500, blank=True, null=True, help_text="Path to document in Google Cloud Storage")
+    gcs_public_url = models.URLField(blank=True, null=True, help_text="Public URL for document in GCS")
+    gcs_bucket_name = models.CharField(max_length=100, blank=True, null=True, help_text="GCS bucket name")
+    
+    # File metadata
+    original_filename = models.CharField(max_length=255)
+    file_size = models.PositiveIntegerField(null=True, blank=True, help_text="File size in bytes")
+    content_type = models.CharField(max_length=100, blank=True, null=True)
+    
+    # Legacy FileField (kept for migration - can be removed after data migration)
     file = models.FileField(
         upload_to=document_upload_path,
-        validators=[validate_document_format, validate_document_size]
+        validators=[validate_document_format, validate_document_size],
+        blank=True, null=True,
+        help_text="Legacy file storage - deprecated"
     )
-    original_filename = models.CharField(max_length=255)
+    
     processing_status = models.CharField(max_length=20, choices=PROCESSING_STATUS, default='pending')
     uploaded_at = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
@@ -274,6 +310,25 @@ class Document(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.original_filename}"
+    
+    def is_stored_in_gcs(self):
+        """Check if document is stored in GCS"""
+        return bool(self.gcs_path and self.gcs_public_url)
+    
+    def get_download_url(self):
+        """Get the document download URL"""
+        return self.gcs_public_url if self.is_stored_in_gcs() else None
+    
+    def get_file_extension(self):
+        """Get file extension from original filename"""
+        import os
+        return os.path.splitext(self.original_filename)[1].lower()
+    
+    def clear_gcs_data(self):
+        """Clear all GCS-related data"""
+        self.gcs_path = None
+        self.gcs_public_url = None
+        self.gcs_bucket_name = None
 
 
 class UserGoal(models.Model):

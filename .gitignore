@@ -111,3 +111,5 @@ SYNC_README.md
 syn_repos.bat
 sync_repos.ps1
 sync_repos.sh
+
+ServiceKey_GoogleCloud.json
