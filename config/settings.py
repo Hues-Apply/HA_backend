@@ -18,6 +18,44 @@ from urllib.parse import urlparse
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Enhanced logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'utils.middleware': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
 load_dotenv()
 from pathlib import Path
 
@@ -131,6 +169,7 @@ INSTALLED_APPS = [
     'users',
     'scholarships',
     'jobs',
+    'utils',  # Custom utilities including database helpers
 ]
 
 
@@ -193,6 +232,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'utils.middleware.ReadOnlyTransactionMiddleware',  # Custom middleware for handling read-only errors
 ]
 
 # CORS settings
@@ -292,6 +332,13 @@ DATABASES = {
         'PASSWORD': url.password,
         'HOST': url.hostname,
         'PORT': url.port,
+        'OPTIONS': {
+            'sslmode': 'require',
+            'connect_timeout': 10,
+            'application_name': 'huesapply_backend',
+        },
+        'CONN_MAX_AGE': 600,  # 10 minutes
+        'ATOMIC_REQUESTS': False,  # Disable automatic transactions
     }
 }
 
@@ -356,3 +403,30 @@ ACCOUNT_AUTHENTICATION_METHOD = 'email'
 # Media files - Using GCS instead of local storage for Vercel deployment
 # MEDIA_URL = '/media/'
 # MEDIA_ROOT = BASE_DIR / 'media'
+
+# Session configuration for better compatibility with read-only databases
+# Try database sessions first, fallback to cache if database is read-only
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+
+# Fallback session configuration for read-only database scenarios
+# If database sessions fail, we can switch to cache-based sessions
+# SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+# SESSION_CACHE_ALIAS = 'default'
+
+# Database connection settings for better reliability
+DB_CONNECTION_RETRY_ATTEMPTS = 3
+DB_CONNECTION_RETRY_DELAY = 1  # seconds
+
+# Additional database settings for Vercel deployment
+if not DEBUG:
+    # Production database settings
+    DATABASES['default']['OPTIONS'].update({
+        'connect_timeout': 20,
+        'keepalives': 1,
+        'keepalives_idle': 30,
+        'keepalives_interval': 10,
+        'keepalives_count': 5,
+    })
